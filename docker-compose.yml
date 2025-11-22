@@ -1,3 +1,4 @@
+
 services:
   # ============================================
   # WhisperX ASR Backend mit Speaker Diarization
@@ -9,15 +10,20 @@ services:
     ports:
       - "9000:9000"
     environment:
-      # WhisperX Engine für Speaker Diarization
+      # WICHTIG: WhisperX Engine für Speaker Diarization
       - ASR_ENGINE=whisperx
       # Modell: tiny, base, small, medium, large-v3
-      - ASR_MODEL=large-v3
+      - ASR_MODEL=${ASR_MODEL:-large-v3}
       # Hugging Face Token für Diarization (ERFORDERLICH!)
+      # BEIDE Varianten setzen für Kompatibilität
       - HF_TOKEN=${HF_TOKEN}
+      - HUGGINGFACE_TOKEN=${HF_TOKEN}
+      # Debug-Modus für Troubleshooting
+      - DEBUG=${DEBUG:-false}
     volumes:
-      # Model-Cache persistent speichern
+      # Model-Cache persistent speichern (wichtig!)
       - whisper_cache:/root/.cache
+      - huggingface_cache:/root/.cache/huggingface
     deploy:
       resources:
         reservations:
@@ -30,7 +36,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 180s
 
   # ============================================
   # Frontend Web-UI mit Editor
@@ -44,12 +50,16 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - whisper-api
-    environment:
-      - API_URL=http://whisper-api:9000
+      whisper-api:
+        condition: service_started
+    networks:
+      - default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   whisper_cache:
+  huggingface_cache:
 
 networks:
   default:

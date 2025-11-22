@@ -7,7 +7,7 @@ class Transkriptor {
         this.apiUrl = '/api';
         this.transcriptData = null;
         this.speakerNames = {};
-        
+
         this.init();
     }
 
@@ -22,39 +22,39 @@ class Transkriptor {
         this.uploadSection = document.getElementById('uploadSection');
         this.progressSection = document.getElementById('progressSection');
         this.editorSection = document.getElementById('editorSection');
-        
+
         // Upload
         this.uploadZone = document.getElementById('uploadZone');
         this.fileInput = document.getElementById('fileInput');
-        
+
         // Options
         this.languageSelect = document.getElementById('languageSelect');
         this.maxSpeakers = document.getElementById('maxSpeakers');
         this.diarizeCheck = document.getElementById('diarizeCheck');
         this.wordTimestamps = document.getElementById('wordTimestamps');
-        
+
         // Progress
         this.progressTitle = document.getElementById('progressTitle');
         this.progressText = document.getElementById('progressText');
         this.fileName = document.getElementById('fileName');
         this.fileSize = document.getElementById('fileSize');
-        
+
         // Editor
         this.speakerList = document.getElementById('speakerList');
         this.transcriptEditor = document.getElementById('transcriptEditor');
         this.exportBtn = document.getElementById('exportBtn');
         this.exportMenu = document.getElementById('exportMenu');
         this.newTranscriptBtn = document.getElementById('newTranscript');
-        
+
         // Stats
         this.wordCountEl = document.getElementById('wordCount');
         this.segmentCountEl = document.getElementById('segmentCount');
         this.durationEl = document.getElementById('duration');
-        
+
         // Status
         this.apiStatus = document.getElementById('apiStatus');
         this.apiStatusText = document.getElementById('apiStatusText');
-        
+
         // Toast
         this.toastContainer = document.getElementById('toastContainer');
     }
@@ -63,17 +63,17 @@ class Transkriptor {
         // Upload Zone
         this.uploadZone.addEventListener('click', () => this.fileInput.click());
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        
+
         // Drag & Drop
         this.uploadZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             this.uploadZone.classList.add('dragover');
         });
-        
+
         this.uploadZone.addEventListener('dragleave', () => {
             this.uploadZone.classList.remove('dragover');
         });
-        
+
         this.uploadZone.addEventListener('drop', (e) => {
             e.preventDefault();
             this.uploadZone.classList.remove('dragover');
@@ -82,32 +82,36 @@ class Transkriptor {
                 this.processFile(files[0]);
             }
         });
-        
+
         // Export
         this.exportBtn.addEventListener('click', () => {
             this.exportMenu.classList.toggle('show');
         });
-        
+
         document.addEventListener('click', (e) => {
             if (!this.exportBtn.contains(e.target) && !this.exportMenu.contains(e.target)) {
                 this.exportMenu.classList.remove('show');
             }
         });
-        
+
         this.exportMenu.querySelectorAll('button').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.exportTranscript(btn.dataset.format);
                 this.exportMenu.classList.remove('show');
             });
         });
-        
+
         // New Transcript
         this.newTranscriptBtn.addEventListener('click', () => this.resetToUpload());
     }
 
     async checkApiStatus() {
         try {
-            const response = await fetch(`${this.apiUrl}/`);
+            // Einfacher GET auf root - folge dem Redirect zu /docs
+            const response = await fetch(`${this.apiUrl}/`, {
+                method: 'GET',
+                redirect: 'follow'
+            });
             if (response.ok) {
                 this.apiStatus.classList.add('connected');
                 this.apiStatus.classList.remove('error');
@@ -149,17 +153,17 @@ class Transkriptor {
         // Build query params
         const params = new URLSearchParams();
         params.set('output', 'json');
-        
+
         if (this.languageSelect.value) {
             params.set('language', this.languageSelect.value);
         }
-        
+
         if (this.diarizeCheck.checked) {
             params.set('diarize', 'true');
             params.set('min_speakers', '1');
             params.set('max_speakers', this.maxSpeakers.value);
         }
-        
+
         if (this.wordTimestamps.checked) {
             params.set('word_timestamps', 'true');
         }
@@ -180,7 +184,7 @@ class Transkriptor {
 
             const data = await response.json();
             this.transcriptData = data;
-            
+
             this.showEditor();
             this.showToast('Transkription erfolgreich!', 'success');
 
@@ -228,13 +232,13 @@ class Transkriptor {
                        data-speaker="${speaker}"
                        placeholder="${speaker}">
             `;
-            
+
             const input = item.querySelector('input');
             input.addEventListener('change', (e) => {
                 this.speakerNames[speaker] = e.target.value || speaker;
                 this.updateSpeakerLabels(speaker);
             });
-            
+
             this.speakerList.appendChild(item);
         });
 
@@ -252,7 +256,7 @@ class Transkriptor {
 
     renderTranscript() {
         this.transcriptEditor.innerHTML = '';
-        
+
         if (!this.transcriptData.segments || this.transcriptData.segments.length === 0) {
             // Fallback: just show full text
             const segment = document.createElement('div');
@@ -272,7 +276,7 @@ class Transkriptor {
             const segment = document.createElement('div');
             segment.className = 'segment';
             segment.dataset.index = index;
-            
+
             segment.innerHTML = `
                 <div class="segment-meta">
                     ${seg.speaker ? `
@@ -329,7 +333,7 @@ class Transkriptor {
 
     exportTranscript(format) {
         const filename = `transkript_${new Date().toISOString().slice(0,10)}`;
-        
+
         switch (format) {
             case 'txt':
                 this.downloadFile(this.generateTxt(), `${filename}.txt`, 'text/plain');
@@ -347,13 +351,13 @@ class Transkriptor {
                 this.generateDocx(filename);
                 break;
         }
-        
+
         this.showToast(`Export als ${format.toUpperCase()} erfolgreich`, 'success');
     }
 
     generateTxt() {
         let output = '';
-        
+
         if (this.transcriptData.segments) {
             this.transcriptData.segments.forEach(seg => {
                 const speaker = seg.speaker ? `[${this.speakerNames[seg.speaker] || seg.speaker}] ` : '';
@@ -362,13 +366,13 @@ class Transkriptor {
         } else {
             output = this.transcriptData.text || '';
         }
-        
+
         return output.trim();
     }
 
     generateSrt() {
         let output = '';
-        
+
         if (this.transcriptData.segments) {
             this.transcriptData.segments.forEach((seg, index) => {
                 const speaker = seg.speaker ? `[${this.speakerNames[seg.speaker] || seg.speaker}] ` : '';
@@ -377,13 +381,13 @@ class Transkriptor {
                 output += `${speaker}${seg.text}\n\n`;
             });
         }
-        
+
         return output.trim();
     }
 
     generateVtt() {
         let output = 'WEBVTT\n\n';
-        
+
         if (this.transcriptData.segments) {
             this.transcriptData.segments.forEach((seg, index) => {
                 const speaker = seg.speaker ? `<v ${this.speakerNames[seg.speaker] || seg.speaker}>` : '';
@@ -392,7 +396,7 @@ class Transkriptor {
                 output += `${speaker}${seg.text}\n\n`;
             });
         }
-        
+
         return output.trim();
     }
 
@@ -418,7 +422,7 @@ class Transkriptor {
     <p><em>Erstellt am ${new Date().toLocaleDateString('de-DE')}</em></p>
     <hr>
 `;
-        
+
         if (this.transcriptData.segments) {
             this.transcriptData.segments.forEach(seg => {
                 const speaker = seg.speaker ? this.speakerNames[seg.speaker] || seg.speaker : '';
@@ -432,11 +436,11 @@ class Transkriptor {
         } else {
             html += `<p>${this.transcriptData.text || ''}</p>`;
         }
-        
+
         html += `
 </body>
 </html>`;
-        
+
         // Download as .doc (Word can open HTML files)
         this.downloadFile(html, `${filename}.doc`, 'application/msword');
     }
@@ -457,7 +461,7 @@ class Transkriptor {
         this.uploadSection.classList.add('hidden');
         this.progressSection.classList.add('hidden');
         this.editorSection.classList.add('hidden');
-        
+
         switch (section) {
             case 'upload':
                 this.uploadSection.classList.remove('hidden');
@@ -483,7 +487,7 @@ class Transkriptor {
         toast.className = `toast ${type}`;
         toast.textContent = message;
         this.toastContainer.appendChild(toast);
-        
+
         setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transform = 'translateX(100px)';
