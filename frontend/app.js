@@ -2,20 +2,129 @@
 // Transkriptor – Main Application
 // ============================================
 
+// ============================================
+// IndexedDB Helper - für große Audio-Dateien
+// ============================================
+class AudioStorage {
+    constructor() {
+        this.dbName = 'TranscriptorDB';
+        this.version = 1;
+        this.db = null;
+    }
+
+    async init() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.version);
+
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve();
+            };
+
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+
+                // Store für Audio-Dateien
+                if (!db.objectStoreNames.contains('audioFiles')) {
+                    db.createObjectStore('audioFiles', { keyPath: 'id' });
+                }
+            };
+        });
+    }
+
+    async saveAudioFile(file) {
+        if (!this.db) await this.init();
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['audioFiles'], 'readwrite');
+            const store = transaction.objectStore('audioFiles');
+
+            const data = {
+                id: 'current',
+                file: file,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                timestamp: Date.now()
+            };
+
+            const request = store.put(data);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getAudioFile() {
+        if (!this.db) await this.init();
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['audioFiles'], 'readonly');
+            const store = transaction.objectStore('audioFiles');
+            const request = store.get('current');
+
+            request.onsuccess = () => {
+                const data = request.result;
+                if (data && data.file) {
+                    // Prüfe Alter (max 7 Tage)
+                    const maxAge = 7 * 24 * 60 * 60 * 1000;
+                    if (Date.now() - data.timestamp < maxAge) {
+                        resolve(data.file);
+                    } else {
+                        this.deleteAudioFile();
+                        resolve(null);
+                    }
+                } else {
+                    resolve(null);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async deleteAudioFile() {
+        if (!this.db) await this.init();
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['audioFiles'], 'readwrite');
+            const store = transaction.objectStore('audioFiles');
+            const request = store.delete('current');
+
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getStorageEstimate() {
+        if (navigator.storage && navigator.storage.estimate) {
+            const estimate = await navigator.storage.estimate();
+            return {
+                usage: estimate.usage,
+                quota: estimate.quota,
+                usagePercent: (estimate.usage / estimate.quota * 100).toFixed(2)
+            };
+        }
+        return null;
+    }
+}
+
 class Transkriptor {
     constructor() {
         this.apiUrl = '/api';
         this.transcriptData = null;
         this.speakerNames = {};
+        this.audioFile = null;
+        this.audioBlob = null;
+        this.audioStorage = new AudioStorage();
 
         this.init();
     }
 
-    init() {
+    async init() {
         this.cacheElements();
         this.bindEvents();
         this.checkApiStatus();
-        this.loadFromStorage();
+        await this.loadFromStorage();
     }
 
     cacheElements() {
@@ -59,6 +168,15 @@ class Transkriptor {
 
         // Toast
         this.toastContainer = document.getElementById('toastContainer');
+
+        // Audio Player
+        this.audioPlayerPanel = document.getElementById('audioPlayerPanel');
+        this.audioPlayer = document.getElementById('audioPlayer');
+        this.audioPlayBtn = document.getElementById('audioPlayBtn');
+        this.audioSeek = document.getElementById('audioSeek');
+        this.audioCurrentTime = document.getElementById('audioCurrentTime');
+        this.audioDuration = document.getElementById('audioDuration');
+        this.volumeSlider = document.getElementById('volumeSlider');
     }
 
     bindEvents() {
@@ -105,6 +223,20 @@ class Transkriptor {
 
         // New Transcript
         this.newTranscriptBtn.addEventListener('click', () => this.resetToUpload());
+
+        // Audio Player Events
+        this.audioPlayBtn.addEventListener('click', () => this.toggleAudioPlayback());
+        this.audioSeek.addEventListener('input', (e) => {
+            const time = (e.target.value / 100) * this.audioPlayer.duration;
+            this.audioPlayer.currentTime = time;
+        });
+        this.volumeSlider.addEventListener('input', (e) => {
+            this.audioPlayer.volume = e.target.value / 100;
+        });
+        this.audioPlayer.addEventListener('timeupdate', () => this.updateAudioProgress());
+        this.audioPlayer.addEventListener('loadedmetadata', () => this.onAudioLoaded());
+        this.audioPlayer.addEventListener('play', () => this.audioPlayBtn.classList.add('playing'));
+        this.audioPlayer.addEventListener('pause', () => this.audioPlayBtn.classList.remove('playing'));
     }
 
     async checkApiStatus() {
@@ -142,6 +274,10 @@ class Transkriptor {
             this.showToast('Bitte eine Audio- oder Videodatei auswählen', 'error');
             return;
         }
+
+        // Store audio file for playback
+        this.audioFile = file;
+        this.audioBlob = URL.createObjectURL(file);
 
         // Show progress
         this.showSection('progress');
@@ -202,7 +338,16 @@ class Transkriptor {
         this.renderSpeakers();
         this.renderTranscript();
         this.updateStats();
+        this.loadAudioPlayer();
         this.saveToStorage();
+    }
+
+    loadAudioPlayer() {
+        if (this.audioBlob) {
+            this.audioPlayer.src = this.audioBlob;
+            this.audioPlayerPanel.classList.remove('hidden');
+            this.audioPlayer.volume = 0.8; // 80%
+        }
     }
 
     renderSpeakers() {
@@ -330,6 +475,15 @@ class Transkriptor {
                 this.transcriptData.segments[index].text = e.target.textContent;
                 this.updateStats();
                 this.saveToStorage();
+            });
+
+            // Click segment to play audio at that time
+            segment.addEventListener('click', (e) => {
+                // Don't trigger if clicking on dropdown or editable text
+                if (e.target.closest('.segment-speaker-select') || e.target.closest('.segment-text')) {
+                    return;
+                }
+                this.playSegment(seg);
             });
 
             this.transcriptEditor.appendChild(segment);
@@ -566,10 +720,78 @@ class Transkriptor {
     }
 
     // ============================================
+    // Audio Player
+    // ============================================
+
+    toggleAudioPlayback() {
+        if (this.audioPlayer.paused) {
+            this.audioPlayer.play();
+        } else {
+            this.audioPlayer.pause();
+        }
+    }
+
+    playSegment(segment) {
+        if (!segment || !segment.start) return;
+
+        // Highlight playing segment
+        const segments = this.transcriptEditor.querySelectorAll('.segment');
+        segments.forEach(s => s.classList.remove('playing'));
+        const targetSegment = this.transcriptEditor.querySelector(`[data-index="${this.transcriptData.segments.indexOf(segment)}"]`);
+        if (targetSegment) {
+            targetSegment.classList.add('playing');
+        }
+
+        // Jump to time and play
+        this.audioPlayer.currentTime = segment.start;
+        this.audioPlayer.play();
+    }
+
+    updateAudioProgress() {
+        const current = this.audioPlayer.currentTime;
+        const duration = this.audioPlayer.duration;
+
+        if (!isNaN(duration)) {
+            this.audioSeek.value = (current / duration) * 100;
+            this.audioCurrentTime.textContent = this.formatAudioTime(current);
+        }
+
+        // Highlight current segment
+        if (this.transcriptData && this.transcriptData.segments) {
+            const currentSegment = this.transcriptData.segments.find(seg =>
+                current >= seg.start && current <= seg.end
+            );
+
+            const segments = this.transcriptEditor.querySelectorAll('.segment');
+            segments.forEach((seg, index) => {
+                if (currentSegment && this.transcriptData.segments[index] === currentSegment) {
+                    seg.classList.add('playing');
+                } else {
+                    seg.classList.remove('playing');
+                }
+            });
+        }
+    }
+
+    onAudioLoaded() {
+        const duration = this.audioPlayer.duration;
+        if (!isNaN(duration)) {
+            this.audioDuration.textContent = this.formatAudioTime(duration);
+        }
+    }
+
+    formatAudioTime(seconds) {
+        if (!seconds || isNaN(seconds)) return '00:00';
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    // ============================================
     // LocalStorage - Persistenz
     // ============================================
 
-    saveToStorage() {
+    async saveToStorage() {
         if (!this.transcriptData) return;
 
         const dataToSave = {
@@ -578,15 +800,27 @@ class Transkriptor {
             timestamp: Date.now()
         };
 
+        // Transkript-Daten in localStorage speichern (ohne Audio)
         try {
             localStorage.setItem('transcriptor_current', JSON.stringify(dataToSave));
         } catch (e) {
             console.error('Fehler beim Speichern:', e);
             this.showToast('Speichern fehlgeschlagen', 'error');
+            return;
+        }
+
+        // Audio-Datei separat in IndexedDB speichern (für große Dateien)
+        if (this.audioFile) {
+            try {
+                await this.audioStorage.saveAudioFile(this.audioFile);
+            } catch (e) {
+                console.warn('Audio konnte nicht in IndexedDB gespeichert werden:', e);
+                // Nicht kritisch - Transkript ist trotzdem gespeichert
+            }
         }
     }
 
-    loadFromStorage() {
+    async loadFromStorage() {
         try {
             const saved = localStorage.getItem('transcriptor_current');
             if (!saved) return;
@@ -599,6 +833,18 @@ class Transkriptor {
                 this.transcriptData = data.transcriptData;
                 this.speakerNames = data.speakerNames || {};
 
+                // Audio aus IndexedDB wiederherstellen
+                try {
+                    const audioFile = await this.audioStorage.getAudioFile();
+                    if (audioFile) {
+                        this.audioFile = audioFile;
+                        this.audioBlob = URL.createObjectURL(audioFile);
+                    }
+                } catch (e) {
+                    console.warn('Audio konnte nicht geladen werden:', e);
+                    // Nicht kritisch - Transkript wird trotzdem angezeigt
+                }
+
                 this.showEditor();
                 this.showToast('Letzte Transkription wiederhergestellt', 'success');
             }
@@ -607,8 +853,15 @@ class Transkriptor {
         }
     }
 
-    clearStorage() {
+    async clearStorage() {
         localStorage.removeItem('transcriptor_current');
+
+        // Audio aus IndexedDB löschen
+        try {
+            await this.audioStorage.deleteAudioFile();
+        } catch (e) {
+            console.warn('Fehler beim Löschen der Audio-Datei:', e);
+        }
     }
 }
 

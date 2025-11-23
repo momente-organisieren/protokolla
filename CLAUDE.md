@@ -33,12 +33,23 @@ The frontend is a single-class application (`Transkriptor` in `frontend/app.js`)
 - Three main views: Upload → Progress → Editor
 - Editable transcript segments with speaker renaming
 - Export formats: TXT, SRT, VTT, JSON, Word (HTML-based .doc)
+- **Audio playback** with synchronized segment highlighting
+- **Persistent storage** using localStorage (transcript) + IndexedDB (audio files)
 
 Key frontend files:
 - `index.html` - Main HTML structure with three sections (upload, progress, editor)
-- `app.js` - Main application logic in `Transkriptor` class
+- `app.js` - Main application logic with `Transkriptor` and `AudioStorage` classes
 - `styles.css` - Complete styling
 - `nginx.conf` - Reverse proxy configuration
+
+### Data Persistence
+
+The application automatically saves your work:
+- **Transkript data** (JSON, speaker names) → localStorage (~5-10 MB limit)
+- **Audio files** (original upload) → IndexedDB (much larger limit, often 50% of disk)
+- **Auto-save** on every change (speaker names, text edits, segment reassignments)
+- **7-day retention** - data expires after 7 days automatically
+- See `INDEXEDDB_STORAGE.md` for detailed storage documentation
 
 ### API Communication
 

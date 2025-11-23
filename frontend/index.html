@@ -159,6 +159,31 @@
                     </div>
                 </div>
 
+                <!-- Audio Player -->
+                <div class="audio-player-panel hidden" id="audioPlayerPanel">
+                    <div class="audio-player-controls">
+                        <button class="audio-play-btn" id="audioPlayBtn" title="Play/Pause">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="5 3 19 12 5 21 5 3"/>
+                            </svg>
+                        </button>
+                        <div class="audio-time">
+                            <span id="audioCurrentTime">00:00</span>
+                            <span class="audio-separator">/</span>
+                            <span id="audioDuration">00:00</span>
+                        </div>
+                        <input type="range" class="audio-seek" id="audioSeek" min="0" max="100" value="0">
+                        <div class="audio-volume">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                            </svg>
+                            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="80">
+                        </div>
+                    </div>
+                    <audio id="audioPlayer" preload="metadata"></audio>
+                </div>
+
                 <!-- Speaker Name Editor -->
                 <div class="speaker-panel" id="speakerPanel">
                     <h3>Sprecher benennen</h3>
