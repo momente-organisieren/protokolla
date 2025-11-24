@@ -141,6 +141,8 @@ class Transkriptor {
         this.audioFile = null;
         this.audioBlob = null;
         this.audioStorage = new AudioStorage();
+        this.selectedSegments = new Set();
+        this.lastClickedIndex = null;
 
         this.init();
     }
@@ -203,6 +205,18 @@ class Transkriptor {
         this.audioCurrentTime = document.getElementById('audioCurrentTime');
         this.audioDuration = document.getElementById('audioDuration');
         this.volumeSlider = document.getElementById('volumeSlider');
+
+        // Bulk Edit
+        this.bulkEditToolbar = document.getElementById('bulkEditToolbar');
+        this.bulkEditCount = document.getElementById('bulkEditCount');
+        this.bulkSpeakerSelect = document.getElementById('bulkSpeakerSelect');
+        this.bulkApplyBtn = document.getElementById('bulkApplyBtn');
+        this.bulkCancelBtn = document.getElementById('bulkCancelBtn');
+
+        // Help Modal
+        this.helpBtn = document.getElementById('helpBtn');
+        this.helpModal = document.getElementById('helpModal');
+        this.helpModalClose = document.getElementById('helpModalClose');
     }
 
     bindEvents() {
@@ -266,6 +280,26 @@ class Transkriptor {
         this.audioPlayer.addEventListener('loadedmetadata', () => this.onAudioLoaded());
         this.audioPlayer.addEventListener('play', () => this.audioPlayBtn.classList.add('playing'));
         this.audioPlayer.addEventListener('pause', () => this.audioPlayBtn.classList.remove('playing'));
+
+        // Bulk Edit Events
+        this.bulkApplyBtn.addEventListener('click', () => this.applyBulkSpeakerChange());
+        this.bulkCancelBtn.addEventListener('click', () => this.cancelBulkSelection());
+
+        // Help Modal Events
+        this.helpBtn.addEventListener('click', () => this.openHelpModal());
+        this.helpModalClose.addEventListener('click', () => this.closeHelpModal());
+        this.helpModal.addEventListener('click', (e) => {
+            if (e.target === this.helpModal) {
+                this.closeHelpModal();
+            }
+        });
+
+        // Close help modal with ESC key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.helpModal.classList.contains('hidden')) {
+                this.closeHelpModal();
+            }
+        });
     }
 
     async checkApiStatus() {
@@ -582,13 +616,20 @@ class Transkriptor {
                 this.saveToStorage();
             });
 
-            // Click segment to play audio at that time
+            // Click segment for multi-select or play audio
             segment.addEventListener('click', (e) => {
                 // Don't trigger if clicking on dropdown or editable text
                 if (e.target.closest('.segment-speaker-select') || e.target.closest('.segment-text')) {
                     return;
                 }
-                this.playSegment(seg);
+
+                // Multi-select with Shift or Ctrl
+                if (e.shiftKey || e.ctrlKey) {
+                    e.preventDefault();
+                    this.handleSegmentSelection(index, e.shiftKey, e.ctrlKey);
+                } else {
+                    this.playSegment(seg);
+                }
             });
 
             this.transcriptEditor.appendChild(segment);
@@ -983,6 +1024,108 @@ class Transkriptor {
         } catch (e) {
             console.warn('Fehler beim Löschen der Audio-Datei:', e);
         }
+    }
+
+    // ============================================
+    // Multi-Select & Bulk Edit
+    // ============================================
+
+    handleSegmentSelection(index, isShift, isCtrl) {
+        if (isShift && this.lastClickedIndex !== null) {
+            // Shift+Click: Select range
+            const start = Math.min(this.lastClickedIndex, index);
+            const end = Math.max(this.lastClickedIndex, index);
+            for (let i = start; i <= end; i++) {
+                this.selectedSegments.add(i);
+            }
+        } else if (isCtrl) {
+            // Ctrl+Click: Toggle single segment
+            if (this.selectedSegments.has(index)) {
+                this.selectedSegments.delete(index);
+            } else {
+                this.selectedSegments.add(index);
+            }
+        }
+
+        this.lastClickedIndex = index;
+        this.updateSegmentSelection();
+    }
+
+    updateSegmentSelection() {
+        // Update visual selection
+        const segments = this.transcriptEditor.querySelectorAll('.segment');
+        segments.forEach((seg, index) => {
+            if (this.selectedSegments.has(index)) {
+                seg.classList.add('selected');
+            } else {
+                seg.classList.remove('selected');
+            }
+        });
+
+        // Show/hide bulk edit toolbar
+        if (this.selectedSegments.size > 0) {
+            this.showBulkEditToolbar();
+        } else {
+            this.hideBulkEditToolbar();
+        }
+    }
+
+    showBulkEditToolbar() {
+        this.bulkEditCount.textContent = `${this.selectedSegments.size} Segment${this.selectedSegments.size === 1 ? '' : 'e'} ausgewählt`;
+
+        // Populate speaker dropdown
+        const allSpeakers = Object.keys(this.speakerNames).sort();
+        this.bulkSpeakerSelect.innerHTML = '';
+        allSpeakers.forEach(spk => {
+            const option = document.createElement('option');
+            option.value = spk;
+            option.textContent = this.speakerNames[spk] || spk;
+            this.bulkSpeakerSelect.appendChild(option);
+        });
+
+        this.bulkEditToolbar.classList.remove('hidden');
+    }
+
+    hideBulkEditToolbar() {
+        this.bulkEditToolbar.classList.add('hidden');
+    }
+
+    applyBulkSpeakerChange() {
+        const newSpeaker = this.bulkSpeakerSelect.value;
+        if (!newSpeaker) return;
+
+        let changedCount = 0;
+        this.selectedSegments.forEach(index => {
+            if (this.transcriptData.segments[index]) {
+                this.transcriptData.segments[index].speaker = newSpeaker;
+                changedCount++;
+            }
+        });
+
+        // Re-render to update UI
+        this.renderTranscript();
+        this.cancelBulkSelection();
+        this.saveToStorage();
+
+        this.showToast(`${changedCount} Segment${changedCount === 1 ? '' : 'e'} zu ${this.speakerNames[newSpeaker]} zugewiesen`, 'success');
+    }
+
+    cancelBulkSelection() {
+        this.selectedSegments.clear();
+        this.lastClickedIndex = null;
+        this.updateSegmentSelection();
+    }
+
+    // ============================================
+    // Help Modal
+    // ============================================
+
+    openHelpModal() {
+        this.helpModal.classList.remove('hidden');
+    }
+
+    closeHelpModal() {
+        this.helpModal.classList.add('hidden');
     }
 }
 

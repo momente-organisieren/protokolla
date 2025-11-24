@@ -24,10 +24,86 @@
                 <h1>Transkriptor</h1>
             </div>
             <div class="header-status">
+                <button class="help-btn" id="helpBtn" title="Hilfe & Shortcuts">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <line x1="12" x2="12.01" y1="17" y2="17"/>
+                    </svg>
+                </button>
                 <span class="status-dot" id="apiStatus"></span>
                 <span class="status-text" id="apiStatusText">Verbinde...</span>
             </div>
         </header>
+
+        <!-- Help Modal -->
+        <div class="modal-overlay hidden" id="helpModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Hilfe & Shortcuts</h2>
+                    <button class="modal-close" id="helpModalClose">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <section class="help-section">
+                        <h3>Mehrfachauswahl</h3>
+                        <div class="help-item">
+                            <kbd>Klick</kbd>
+                            <span>Segment auswählen</span>
+                        </div>
+                        <div class="help-item">
+                            <kbd>Shift + Klick</kbd>
+                            <span>Mehrere Segmente auswählen (Bereich)</span>
+                        </div>
+                        <div class="help-item">
+                            <kbd>Strg + Klick</kbd>
+                            <span>Einzelne Segmente hinzufügen/entfernen</span>
+                        </div>
+                        <p class="help-note">Nach der Auswahl erscheint eine Toolbar zum Zuweisen von Sprechern.</p>
+                    </section>
+
+                    <section class="help-section">
+                        <h3>Audio-Player</h3>
+                        <div class="help-item">
+                            <kbd>Klick auf Segment</kbd>
+                            <span>Audio ab dieser Stelle abspielen</span>
+                        </div>
+                        <div class="help-item">
+                            <kbd>Leertaste</kbd>
+                            <span>Play/Pause (wenn Player fokussiert)</span>
+                        </div>
+                    </section>
+
+                    <section class="help-section">
+                        <h3>Sprecher verwalten</h3>
+                        <ul>
+                            <li>Klicken Sie auf einen Sprecher-Namen, um ihn umzubenennen</li>
+                            <li>Verwenden Sie das Dropdown bei jedem Segment, um den Sprecher zu ändern</li>
+                            <li>Button "Sprecher hinzufügen" erstellt zusätzliche Sprecher</li>
+                        </ul>
+                    </section>
+
+                    <section class="help-section">
+                        <h3>Export</h3>
+                        <ul>
+                            <li><strong>TXT</strong> - Einfacher Text mit Sprecher-Namen</li>
+                            <li><strong>SRT/VTT</strong> - Untertitel mit Zeitstempeln</li>
+                            <li><strong>JSON</strong> - Alle Daten (inkl. Zeitstempel)</li>
+                            <li><strong>Word</strong> - Formatiertes Dokument</li>
+                        </ul>
+                    </section>
+
+                    <section class="help-section">
+                        <h3>Datenpersistenz</h3>
+                        <p>Ihre Arbeit wird automatisch gespeichert und bleibt 7 Tage erhalten.</p>
+                    </section>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -77,8 +153,12 @@
                             <option value="5">5</option>
                             <option value="6">6</option>
                             <option value="7">7</option>
-                            <option value="8" selected>8</option>
+                            <option value="8">8</option>
                             <option value="10">10</option>
+                            <option value="12">12</option>
+                            <option value="15" selected>15</option>
+                            <option value="18">18</option>
+                            <option value="20">20</option>
                         </select>
                     </div>
                     <div class="option-group">
@@ -89,8 +169,12 @@
                             <option value="4">4</option>
                             <option value="5">5</option>
                             <option value="8">8</option>
-                            <option value="10" selected>10</option>
+                            <option value="10">10</option>
                             <option value="15">15</option>
+                            <option value="18">18</option>
+                            <option value="20">20</option>
+                            <option value="25" selected>25</option>
+                            <option value="30">30</option>
                         </select>
                     </div>
                     <div class="option-group checkbox-group">
@@ -199,6 +283,19 @@
                         </button>
                     </div>
                     <div class="speaker-list" id="speakerList"></div>
+                </div>
+
+                <!-- Bulk Edit Toolbar -->
+                <div class="bulk-edit-toolbar hidden" id="bulkEditToolbar">
+                    <div class="bulk-edit-content">
+                        <span class="bulk-edit-count" id="bulkEditCount">0 Segmente ausgewählt</span>
+                        <div class="bulk-edit-actions">
+                            <label>Sprecher zuweisen:</label>
+                            <select id="bulkSpeakerSelect" class="bulk-speaker-select"></select>
+                            <button class="toolbar-btn" id="bulkApplyBtn">Anwenden</button>
+                            <button class="toolbar-btn" id="bulkCancelBtn">Abbrechen</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Transcript Editor -->
