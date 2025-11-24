@@ -133,6 +133,216 @@ class AudioStorage {
     }
 }
 
+// ============================================
+// Summary Manager - für KI-Zusammenfassungen
+// ============================================
+class SummaryManager {
+    constructor(transkriptor) {
+        this.transkriptor = transkriptor;
+        this.ollamaUrl = '/ollama';
+        this.currentSummary = null;
+        this.model = 'llama3.1:8b';
+    }
+
+    async generateSummary(type) {
+        const transcriptText = this.getTranscriptText();
+        if (!transcriptText) {
+            this.transkriptor.showToast('Kein Transkript verfügbar', 'error');
+            return;
+        }
+
+        const prompt = this.buildPrompt(type, transcriptText);
+
+        try {
+            this.showLoading();
+            const summary = await this.streamFromOllama(prompt);
+            this.currentSummary = { type, text: summary };
+            this.showSummary(summary);
+            this.transkriptor.showToast('Zusammenfassung erstellt', 'success');
+        } catch (error) {
+            console.error('Summary generation error:', error);
+            this.transkriptor.showToast(`Fehler: ${error.message}`, 'error');
+            this.showPlaceholder();
+        }
+    }
+
+    getTranscriptText() {
+        if (!this.transkriptor.transcriptData) return null;
+
+        if (this.transkriptor.transcriptData.segments) {
+            return this.transkriptor.transcriptData.segments.map(seg => {
+                const speaker = seg.speaker ?
+                    `[${this.transkriptor.speakerNames[seg.speaker] || seg.speaker}] ` : '';
+                const time = this.transkriptor.formatTime(seg.start);
+                return `[${time}] ${speaker}${seg.text}`;
+            }).join('\n\n');
+        }
+
+        return this.transkriptor.transcriptData.text || '';
+    }
+
+    buildPrompt(type, transcriptText) {
+        const prompts = {
+            short: `Du bist ein professioneller Transkript-Zusammenfasser. Erstelle eine präzise Zusammenfassung des folgenden Transkripts in genau 3-5 Sätzen. Konzentriere dich auf die Hauptthemen und wichtigsten Erkenntnisse.
+
+Transkript:
+${transcriptText}
+
+Gib nur die Zusammenfassung aus, ohne zusätzliche Kommentare.`,
+
+            structured: `Analysiere das folgende Transkript und erstelle eine strukturierte Zusammenfassung in diesem Format:
+
+## Hauptthema
+[Ein Satz, der das Gesamtthema beschreibt]
+
+## Kernpunkte
+- [Erster Hauptpunkt]
+- [Zweiter Hauptpunkt]
+- [Dritter Hauptpunkt]
+
+## Fazit
+[Ein Satz, der das Ergebnis oder die Schlussfolgerung zusammenfasst]
+
+Transkript:
+${transcriptText}`,
+
+            timeline: `Erstelle eine chronologische Zusammenfassung dieses Transkripts mit Zeitstempeln. Für jedes wichtige Thema oder Ereignis, gib den Zeitstempel an, wann es beginnt.
+
+Format:
+[MM:SS] Beschreibung des Themas/Ereignisses
+
+Transkript mit Zeitstempeln:
+${transcriptText}
+
+Gib eine chronologische Zusammenfassung mit den wichtigsten Momenten und deren Zeitstempeln aus.`,
+
+            actions: `Extrahiere alle Aufgaben und Action Items aus dem folgenden Transkript. Formatiere sie als Checkliste.
+
+Transkript:
+${transcriptText}
+
+Liste alle Action Items in diesem Format auf:
+- [ ] Aufgabe mit verantwortlicher Person (falls erwähnt)
+
+Konzentriere dich nur auf konkrete, umsetzbare Aufgaben. Falls keine Action Items vorhanden sind, antworte mit "Keine Action Items identifiziert."`
+        };
+
+        return prompts[type] || prompts.short;
+    }
+
+    async streamFromOllama(prompt) {
+        const response = await fetch(`${this.ollamaUrl}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: this.model,
+                prompt: prompt,
+                stream: true,
+                options: {
+                    temperature: 0.7,
+                    num_predict: 1000
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Fehler: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let summary = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim());
+
+            for (const line of lines) {
+                try {
+                    const json = JSON.parse(line);
+                    if (json.response) {
+                        summary += json.response;
+                        this.updateSummaryDisplay(summary);
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse JSON line:', line);
+                }
+            }
+        }
+
+        return summary;
+    }
+
+    showLoading() {
+        const placeholder = document.getElementById('summaryPlaceholder');
+        const loading = document.getElementById('summaryLoading');
+        const text = document.getElementById('summaryText');
+        const actions = document.getElementById('summaryActions');
+
+        placeholder.classList.add('hidden');
+        loading.classList.remove('hidden');
+        text.classList.add('hidden');
+        actions.classList.add('hidden');
+    }
+
+    showPlaceholder() {
+        const placeholder = document.getElementById('summaryPlaceholder');
+        const loading = document.getElementById('summaryLoading');
+        const text = document.getElementById('summaryText');
+        const actions = document.getElementById('summaryActions');
+
+        placeholder.classList.remove('hidden');
+        loading.classList.add('hidden');
+        text.classList.add('hidden');
+        actions.classList.add('hidden');
+    }
+
+    updateSummaryDisplay(summary) {
+        const loading = document.getElementById('summaryLoading');
+        const text = document.getElementById('summaryText');
+
+        loading.classList.add('hidden');
+        text.classList.remove('hidden');
+        text.textContent = summary;
+    }
+
+    showSummary(summary) {
+        const placeholder = document.getElementById('summaryPlaceholder');
+        const loading = document.getElementById('summaryLoading');
+        const text = document.getElementById('summaryText');
+        const actions = document.getElementById('summaryActions');
+
+        placeholder.classList.add('hidden');
+        loading.classList.add('hidden');
+        text.classList.remove('hidden');
+        text.textContent = summary;
+        actions.classList.remove('hidden');
+    }
+
+    copySummary() {
+        if (!this.currentSummary) return;
+
+        navigator.clipboard.writeText(this.currentSummary.text).then(() => {
+            this.transkriptor.showToast('In Zwischenablage kopiert', 'success');
+        }).catch(err => {
+            this.transkriptor.showToast('Kopieren fehlgeschlagen', 'error');
+        });
+    }
+
+    exportSummary() {
+        if (!this.currentSummary) return;
+
+        const filename = `zusammenfassung_${this.currentSummary.type}_${new Date().toISOString().slice(0, 10)}`;
+        const content = this.currentSummary.text;
+
+        this.transkriptor.downloadFile(content, `${filename}.txt`, 'text/plain');
+        this.transkriptor.showToast('Zusammenfassung exportiert', 'success');
+    }
+}
+
 class Transkriptor {
     constructor() {
         this.apiUrl = '/api';
@@ -143,6 +353,7 @@ class Transkriptor {
         this.audioStorage = new AudioStorage();
         this.selectedSegments = new Set();
         this.lastClickedIndex = null;
+        this.summaryManager = new SummaryManager(this);
 
         this.init();
     }
@@ -217,6 +428,14 @@ class Transkriptor {
         this.helpBtn = document.getElementById('helpBtn');
         this.helpModal = document.getElementById('helpModal');
         this.helpModalClose = document.getElementById('helpModalClose');
+
+        // Summary Panel
+        this.summaryPanel = document.getElementById('summaryPanel');
+        this.summaryType = document.getElementById('summaryType');
+        this.generateSummaryBtn = document.getElementById('generateSummaryBtn');
+        this.copySummaryBtn = document.getElementById('copySummaryBtn');
+        this.exportSummaryBtn = document.getElementById('exportSummaryBtn');
+        this.regenerateSummaryBtn = document.getElementById('regenerateSummaryBtn');
     }
 
     bindEvents() {
@@ -299,6 +518,18 @@ class Transkriptor {
             if (e.key === 'Escape' && !this.helpModal.classList.contains('hidden')) {
                 this.closeHelpModal();
             }
+        });
+
+        // Summary Panel Events
+        this.generateSummaryBtn.addEventListener('click', () => {
+            const type = this.summaryType.value;
+            this.summaryManager.generateSummary(type);
+        });
+        this.copySummaryBtn.addEventListener('click', () => this.summaryManager.copySummary());
+        this.exportSummaryBtn.addEventListener('click', () => this.summaryManager.exportSummary());
+        this.regenerateSummaryBtn.addEventListener('click', () => {
+            const type = this.summaryType.value;
+            this.summaryManager.generateSummary(type);
         });
     }
 
@@ -402,7 +633,14 @@ class Transkriptor {
         this.renderTranscript();
         this.updateStats();
         this.loadAudioPlayer();
+        this.showSummaryPanel();
         this.saveToStorage();
+    }
+
+    showSummaryPanel() {
+        if (this.summaryPanel) {
+            this.summaryPanel.classList.remove('hidden');
+        }
     }
 
     loadAudioPlayer() {
@@ -436,6 +674,7 @@ class Transkriptor {
         Array.from(speakers).sort().forEach((speaker, index) => {
             const item = document.createElement('div');
             item.className = 'speaker-item';
+            // noinspection CssUnresolvedCustomProperty
             item.innerHTML = `
                 <div class="speaker-color" style="background: var(--speaker-${index % 8})"></div>
                 <input type="text" 
@@ -482,6 +721,7 @@ class Transkriptor {
         // Erstelle neues Speaker-Item
         const item = document.createElement('div');
         item.className = 'speaker-item';
+        // noinspection CssUnresolvedCustomProperty
         item.innerHTML = `
             <div class="speaker-color" style="background: var(--speaker-${speakerIndex % 8})"></div>
             <input type="text"

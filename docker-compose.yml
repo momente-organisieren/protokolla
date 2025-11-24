@@ -40,8 +40,43 @@ services:
       retries: 3
       start_period: 600s
 
-      # ============================================
-      # Frontend Web-UI mit Editor
+  # ============================================
+  # Ollama LLM Service für Zusammenfassungen
+  # ============================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      # Performance-Optimierung
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=10m
+      # GPU Memory Overhead (1GB für 8GB VRAM Systeme)
+      - OLLAMA_GPU_OVERHEAD=1073741824
+    volumes:
+      # Persistente Model-Speicherung
+      - ollama_models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    networks:
+      - default
+
+  # ============================================
+  # Frontend Web-UI mit Editor
   # ============================================
   frontend:
     build:
@@ -62,6 +97,7 @@ services:
 volumes:
   whisper_cache:
   huggingface_cache:
+  ollama_models:
 
 networks:
   default:

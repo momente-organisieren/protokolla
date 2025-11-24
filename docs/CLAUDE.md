@@ -8,9 +8,9 @@ Transkriptor is a locally-hosted web application for automatic transcription of 
 
 ## Architecture
 
-### Two-Service System
+### Three-Service System
 
-The application consists of two Docker containers orchestrated via `docker-compose.yml`:
+The application consists of three Docker containers orchestrated via `docker-compose.yml`:
 
 1. **whisper-api** (Backend)
    - Image: `onerahmet/openai-whisper-asr-webservice:latest-gpu`
@@ -20,21 +20,31 @@ The application consists of two Docker containers orchestrated via `docker-compo
    - Uses WhisperX engine for ASR with speaker diarization
    - Requires Hugging Face token for pyannote models (segmentation-3.0, speaker-diarization-3.1)
 
-2. **frontend** (Web UI)
+2. **ollama** (LLM Service for Summaries)
+   - Image: `ollama/ollama:latest`
+   - Port: 11434
+   - Provides local LLM for generating transcript summaries
+   - Shares GPU with whisper-api (sequential usage)
+   - Model: llama3.1:8b (recommended) or llama3.2:3b (for low VRAM)
+   - Generates 4 types of summaries: short, structured, timeline, action items
+
+3. **frontend** (Web UI)
    - Custom nginx container serving static files
    - Port: 3000 (exposed), 80 (internal)
    - Single-page application (vanilla JS, no framework)
-   - nginx acts as reverse proxy: `/api/*` routes to `whisper-api:9000`
+   - nginx acts as reverse proxy: `/api/*` routes to `whisper-api:9000`, `/ollama/*` routes to `ollama:11434`
 
 ### Frontend Architecture
 
-The frontend is a single-class application (`Transkriptor` in `frontend/app.js`):
+The frontend is a two-class application (`Transkriptor` and `SummaryManager` in `frontend/app.js`):
 - **No build process** - vanilla HTML/CSS/JS served directly
 - Three main views: Upload → Progress → Editor
 - Editable transcript segments with speaker renaming
+- **AI Summary Panel** with 4 summary types (short, structured, timeline, action items)
 - Export formats: TXT, SRT, VTT, JSON, Word (HTML-based .doc)
 - **Audio playback** with synchronized segment highlighting
 - **Persistent storage** using localStorage (transcript) + IndexedDB (audio files)
+- **Real-time streaming** summary generation with Ollama LLM
 
 Key frontend files:
 - `index.html` - Main HTML structure with three sections (upload, progress, editor)
@@ -53,10 +63,18 @@ The application automatically saves your work:
 
 ### API Communication
 
-Frontend calls backend via nginx proxy:
+Frontend calls backend services via nginx proxy:
+
+**Transcription:**
 - Frontend: `fetch('/api/asr?...')`
 - nginx rewrites to: `http://whisper-api:9000/asr?...`
 - API health check: `GET /api/` redirects to `/docs` (FastAPI endpoint)
+
+**AI Summaries:**
+- Frontend: `fetch('/ollama/api/generate')`
+- nginx rewrites to: `http://ollama:11434/api/generate`
+- Streaming: Real-time summary generation with progressive display
+- Model: llama3.1:8b (5GB VRAM) or llama3.2:3b (2GB VRAM)
 
 ## Common Commands
 
@@ -68,7 +86,17 @@ docker compose up -d
 
 # View logs (especially useful during first start for model downloads)
 docker compose logs -f whisper-api
+docker compose logs -f ollama
 docker compose logs -f frontend
+
+# First-time setup: Pull Ollama model (after containers are running)
+docker exec ollama ollama pull llama3.1:8b
+
+# Alternative for low VRAM systems (2GB instead of 5GB)
+docker exec ollama ollama pull llama3.2:3b
+
+# Check installed models
+docker exec ollama ollama list
 
 # Restart containers (e.g., after .env changes)
 docker compose restart
@@ -100,7 +128,8 @@ docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
 
 Environment variables in `.env`:
 - `HF_TOKEN` - Hugging Face token (required for diarization)
-- `ASR_MODEL` - Model size: tiny, base, small, medium, large-v3 (default)
+- `ASR_MODEL` - Whisper model size: tiny, base, small, medium, large-v3 (default)
+- `OLLAMA_MODEL` - LLM model for summaries: llama3.1:8b (recommended), llama3.2:3b (low VRAM)
 - `DEBUG` - Set to "true" for verbose logs
 
 Both `HF_TOKEN` and `HUGGINGFACE_TOKEN` are set to the same value for compatibility.
@@ -155,9 +184,10 @@ The frontend stores this in `transcriptData` and renders editable segments.
 
 ### Volumes
 
-Two named volumes persist model caches:
-- `whisper_cache` - Maps to `/root/.cache`
-- `huggingface_cache` - Maps to `/root/.cache/huggingface`
+Three named volumes persist model caches:
+- `whisper_cache` - Maps to `/root/.cache` (WhisperX models)
+- `huggingface_cache` - Maps to `/root/.cache/huggingface` (pyannote models)
+- `ollama_models` - Maps to `/root/.ollama` (LLM models, ~5GB per model)
 
 This prevents re-downloading models on container restart.
 
