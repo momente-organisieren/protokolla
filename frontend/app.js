@@ -140,7 +140,8 @@ class SummaryManager {
     constructor(transkriptor) {
         this.transkriptor = transkriptor;
         this.ollamaUrl = '/ollama';
-        this.currentSummary = null;
+        this.summaries = {}; // Objekt mit allen generierten Zusammenfassungen { short: {...}, structured: {...}, etc. }
+        this.currentType = 'short'; // Aktuell angezeigter Typ
         this.model = 'qwen2.5:7b';
     }
 
@@ -156,13 +157,21 @@ class SummaryManager {
         try {
             this.showLoading();
             const summary = await this.streamFromOllama(prompt);
-            this.currentSummary = { type, text: summary };
+
+            // Speichere Summary im Objekt nach Typ
+            this.summaries[type] = {
+                type,
+                text: summary,
+                timestamp: Date.now()
+            };
+            this.currentType = type;
+
             this.showSummary(summary);
             this.transkriptor.showToast('Zusammenfassung erstellt', 'success');
 
-            // Auto-Save der Zusammenfassung
+            // Auto-Save aller Zusammenfassungen
             await this.transkriptor.saveToStorage();
-            console.log('✅ Zusammenfassung gespeichert');
+            console.log('✅ Zusammenfassung gespeichert:', type);
         } catch (error) {
             console.error('Summary generation error:', error);
             this.transkriptor.showToast(`Fehler: ${error.message}`, 'error');
@@ -228,7 +237,17 @@ ${transcriptText}
 Liste alle Action Items in diesem Format auf:
 - [ ] Aufgabe mit verantwortlicher Person (falls erwähnt)
 
-Konzentriere dich nur auf konkrete, umsetzbare Aufgaben. Falls keine Action Items vorhanden sind, antworte mit "Keine Action Items identifiziert."`
+Konzentriere dich nur auf konkrete, umsetzbare Aufgaben. Falls keine Action Items vorhanden sind, antworte mit "Keine Action Items identifiziert."`,
+
+            tags: `Analysiere das folgende Transkript und extrahiere die wichtigsten Schlagworte und Themen. Erstelle eine Liste von relevanten Tags, die den Inhalt gut beschreiben.
+
+Transkript:
+${transcriptText}
+
+Gib die Tags in diesem Format aus (sortiert nach Relevanz, maximal 10-15 Tags):
+#Tag1 #Tag2 #Tag3 #Tag4 #Tag5
+
+Konzentriere dich auf konkrete Themen, Fachbegriffe, Personen, Orte und zentrale Konzepte. Gib nur die Tags aus, ohne zusätzliche Erklärungen.`
         };
 
         return prompts[type] || prompts.short;
@@ -326,10 +345,25 @@ Konzentriere dich nur auf konkrete, umsetzbare Aufgaben. Falls keine Action Item
         actions.classList.remove('hidden');
     }
 
-    copySummary() {
-        if (!this.currentSummary) return;
+    // Wechsle zu einem anderen Summary-Typ (zeige gespeicherte Summary an, falls vorhanden)
+    switchSummaryType(type) {
+        this.currentType = type;
 
-        navigator.clipboard.writeText(this.currentSummary.text).then(() => {
+        if (this.summaries[type]) {
+            // Gespeicherte Summary vorhanden - direkt anzeigen
+            this.showSummary(this.summaries[type].text);
+            console.log('📋 Gespeicherte Zusammenfassung geladen:', type);
+        } else {
+            // Keine gespeicherte Summary - zeige Placeholder
+            this.showPlaceholder();
+        }
+    }
+
+    copySummary() {
+        const currentSummary = this.summaries[this.currentType];
+        if (!currentSummary) return;
+
+        navigator.clipboard.writeText(currentSummary.text).then(() => {
             this.transkriptor.showToast('In Zwischenablage kopiert', 'success');
         }).catch(err => {
             this.transkriptor.showToast('Kopieren fehlgeschlagen', 'error');
@@ -337,10 +371,11 @@ Konzentriere dich nur auf konkrete, umsetzbare Aufgaben. Falls keine Action Item
     }
 
     exportSummary() {
-        if (!this.currentSummary) return;
+        const currentSummary = this.summaries[this.currentType];
+        if (!currentSummary) return;
 
-        const filename = `zusammenfassung_${this.currentSummary.type}_${new Date().toISOString().slice(0, 10)}`;
-        const content = this.currentSummary.text;
+        const filename = `zusammenfassung_${currentSummary.type}_${new Date().toISOString().slice(0, 10)}`;
+        const content = currentSummary.text;
 
         this.transkriptor.downloadFile(content, `${filename}.txt`, 'text/plain');
         this.transkriptor.showToast('Zusammenfassung exportiert', 'success');
@@ -532,6 +567,10 @@ class Transkriptor {
         });
 
         // Summary Panel Events
+        this.summaryType.addEventListener('change', () => {
+            const type = this.summaryType.value;
+            this.summaryManager.switchSummaryType(type);
+        });
         this.generateSummaryBtn.addEventListener('click', () => {
             const type = this.summaryType.value;
             this.summaryManager.generateSummary(type);
@@ -1223,7 +1262,7 @@ class Transkriptor {
         const dataToSave = {
             transcriptData: this.transcriptData,
             speakerNames: this.speakerNames,
-            summary: this.summaryManager.currentSummary || null,
+            summaries: this.summaryManager.summaries || {},
             timestamp: Date.now()
         };
 
@@ -1270,10 +1309,15 @@ class Transkriptor {
                 this.speakerNames = data.speakerNames || {};
                 console.log('✅ Transkript-Daten geladen');
 
-                // Zusammenfassung wiederherstellen
-                if (data.summary) {
-                    this.summaryManager.currentSummary = data.summary;
-                    console.log('✅ Zusammenfassung geladen:', data.summary.type);
+                // Zusammenfassungen wiederherstellen
+                if (data.summaries && Object.keys(data.summaries).length > 0) {
+                    // Neues Format: Mehrere Summaries
+                    this.summaryManager.summaries = data.summaries;
+                    console.log('✅ Zusammenfassungen geladen:', Object.keys(data.summaries).join(', '));
+                } else if (data.summary) {
+                    // Altes Format: Einzelne Summary (Rückwärtskompatibilität)
+                    this.summaryManager.summaries[data.summary.type] = data.summary;
+                    console.log('✅ Zusammenfassung geladen (alt):', data.summary.type);
                 }
 
                 // Audio aus IndexedDB wiederherstellen
@@ -1295,8 +1339,17 @@ class Transkriptor {
                 this.showEditor();
 
                 // Zusammenfassung im UI anzeigen (falls vorhanden)
-                if (data.summary && data.summary.text) {
-                    this.summaryManager.showSummary(data.summary.text);
+                // Zeige die erste verfügbare Zusammenfassung oder die vom aktuellen Typ
+                const currentType = this.summaryType.value || 'short';
+                if (this.summaryManager.summaries[currentType]) {
+                    this.summaryManager.switchSummaryType(currentType);
+                } else {
+                    // Zeige erste verfügbare Zusammenfassung
+                    const firstType = Object.keys(this.summaryManager.summaries)[0];
+                    if (firstType) {
+                        this.summaryType.value = firstType;
+                        this.summaryManager.switchSummaryType(firstType);
+                    }
                 }
 
                 this.showToast('Letzte Transkription wiederhergestellt', 'success');
