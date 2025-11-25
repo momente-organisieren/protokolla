@@ -1,14 +1,19 @@
-# 🎙️ Transkriptor – Lokale Spracherkennung mit Sprecher-Diarisierung
+# 🎙️ Transkriptor – Lokale Spracherkennung mit KI-Zusammenfassungen
 
-Eine vollständig lokal gehostete Web-Anwendung zur automatischen Transkription von Audio- und Videodateien mit Sprecherzuweisung.
+Eine vollständig lokal gehostete Web-Anwendung zur automatischen Transkription von Audio- und Videodateien mit Sprecherzuweisung und intelligenten KI-Zusammenfassungen.
+
+**🚀 Neu:** Integriertes KI-System für automatische Zusammenfassungen mit 5 verschiedenen Typen – vollständig lokal und DSGVO-konform!
 
 ## ✨ Features
 
 - **🎯 Lokale Verarbeitung** – Deine Daten verlassen nie deinen Server
-- **👥 Sprecher-Diarisierung** – Automatische Erkennung verschiedener Sprecher
+- **👥 Sprecher-Diarisierung** – Automatische Erkennung verschiedener Sprecher (bis zu 30 Sprecher)
 - **🌍 Multi-Sprache** – Unterstützt 20+ Sprachen (Deutsch, Englisch, etc.)
 - **⏱️ Zeitstempel** – Wortgenaue oder Segment-Zeitstempel
 - **✏️ Editor** – Transkripte direkt im Browser bearbeiten
+- **🤖 KI-Zusammenfassungen** – 5 verschiedene Zusammenfassungstypen mit lokalem LLM (Ollama)
+- **🗂️ Tab-Navigation** – Übersichtliche Trennung von Transkript und Zusammenfassungen
+- **💾 Persistenz** – Automatisches Speichern von Transkripten und Zusammenfassungen
 - **📁 Export** – TXT, SRT, VTT, JSON, Word-Format
 
 ## 🖥️ Systemanforderungen
@@ -67,25 +72,66 @@ nano .env
 docker compose up -d
 ```
 
-⏳ **Erster Start dauert länger** – Die Modelle werden heruntergeladen (~10 GB).
+⏳ **Erster Start dauert länger** – Die Modelle werden heruntergeladen (~10 GB für WhisperX).
 
-### 5. Öffnen
+### 5. Ollama LLM für Zusammenfassungen einrichten (Optional)
+
+Das Ollama LLM für KI-Zusammenfassungen wird automatisch mit gestartet. Lade das empfohlene Modell herunter:
+
+```bash
+# Empfohlenes Modell (4.5 GB, benötigt ~5 GB VRAM)
+docker exec ollama ollama pull qwen2.5:7b
+
+# Alternative für weniger VRAM (2 GB, benötigt ~2 GB VRAM)
+docker exec ollama ollama pull llama3.2:3b
+```
+
+**Hinweis:** WhisperX und Ollama teilen sich die GPU sequentiell. Erst wird transkribiert, dann können Zusammenfassungen generiert werden.
+
+### 6. Öffnen
 
 Öffne im Browser: **http://localhost:3000**
 
 ## 📋 Nutzung
 
+### Transkription erstellen
+
 1. **Datei hochladen** – Audio (MP3, WAV, M4A...) oder Video (MP4, MKV...)
 2. **Optionen wählen**:
    - Sprache (automatisch oder manuell)
-   - Max. Anzahl Sprecher
+   - Min./Max. Anzahl Sprecher (1-30)
    - Sprecher-Erkennung ein/aus
    - Wort-Zeitstempel ein/aus
 3. **Warten** – Je nach Dateigröße einige Sekunden bis Minuten
-4. **Bearbeiten** – Sprecher umbenennen, Text korrigieren
+4. **Bearbeiten** – Im **Transkript-Tab**:
+   - Sprecher umbenennen
+   - Text korrigieren
+   - Segmente zusammenführen oder teilen
+   - Bulk-Edit für mehrere Segmente
 5. **Exportieren** – Format wählen und herunterladen
 
+### KI-Zusammenfassungen nutzen
+
+Nach der Transkription wechselst du zum **Zusammenfassung-Tab**:
+
+1. **Typ auswählen** aus dem Dropdown:
+   - **Kurze Übersicht** – Executive Summary in 3-5 Sätzen
+   - **Strukturierte Zusammenfassung** – Mit Hauptthema, Kernpunkten und Fazit
+   - **Zeitstempel-basiert** – Chronologische Zusammenfassung mit Zeitmarken
+   - **Action Items** – Extrahierte Aufgaben als Checkliste
+   - **Tags / Schlagworte** – Relevante Themen und Schlagworte
+
+2. **Generieren klicken** – Die Zusammenfassung wird in Echtzeit gestreamt
+
+3. **Zwischen Typen wechseln** – Bereits generierte Zusammenfassungen werden sofort geladen, ohne neu zu generieren
+
+4. **Exportieren oder Kopieren** – Zusammenfassungen als TXT exportieren oder in Zwischenablage kopieren
+
+**Hinweis:** Alle Zusammenfassungen werden automatisch gespeichert und sind auch nach einem Neuladen verfügbar.
+
 ## 🎛️ Modelle & Performance
+
+### WhisperX ASR-Modelle
 
 | Modell | VRAM | Qualität | Geschwindigkeit |
 |--------|------|----------|-----------------|
@@ -95,13 +141,49 @@ docker compose up -d
 | `medium` | ~5 GB | ⭐⭐⭐⭐ | ⚡⚡ |
 | `large-v3` | ~10 GB | ⭐⭐⭐⭐⭐ | ⚡ |
 
-Modell ändern in `docker-compose.yml`:
-```yaml
-environment:
-  - ASR_MODEL=medium  # oder: tiny, base, small, large-v3
+Modell ändern in `.env`:
+```bash
+ASR_MODEL=small  # oder: tiny, base, medium, large-v3
 ```
 
+### Ollama LLM-Modelle (für Zusammenfassungen)
+
+| Modell | VRAM | Download | Tokens/s | Qualität |
+|--------|------|----------|----------|----------|
+| `llama3.2:3b` | ~2 GB | 2 GB | ~60 | Gut |
+| `qwen2.5:7b` | ~5 GB | 4.5 GB | ~35 | ⭐ Exzellent (Empfohlen) |
+| `llama3.1:8b` | ~5 GB | 4.7 GB | ~35 | Sehr gut |
+| `mistral:7b` | ~4.5 GB | 4.1 GB | ~40 | Sehr gut |
+
+**Empfehlung:** `qwen2.5:7b` – Beste Qualität für strukturierte Zusammenfassungen
+
+Modell ändern in `.env`:
+```bash
+OLLAMA_MODEL=qwen2.5:7b
+```
+
+Dann neues Modell herunterladen:
+```bash
+docker exec ollama ollama pull qwen2.5:7b
+docker compose restart frontend
+```
+
+**GPU-Speicher:** WhisperX und Ollama teilen sich die GPU. Empfohlen sind mindestens 8 GB VRAM für beide Dienste.
+
 ## 🔧 Konfiguration
+
+### Umgebungsvariablen (.env)
+
+```bash
+# Hugging Face Token (ERFORDERLICH für Sprecher-Diarisierung)
+HF_TOKEN=hf_deinTokenHier
+
+# WhisperX ASR-Modell
+ASR_MODEL=small  # tiny, base, small, medium, large-v3
+
+# Ollama LLM-Modell für Zusammenfassungen
+OLLAMA_MODEL=qwen2.5:7b  # qwen2.5:7b, llama3.1:8b, llama3.2:3b, mistral:7b
+```
 
 ### docker-compose.yml Optionen
 
@@ -109,10 +191,10 @@ environment:
 environment:
   # ASR Engine (whisperx für Diarization)
   - ASR_ENGINE=whisperx
-  
-  # Modellgröße
-  - ASR_MODEL=large-v3
-  
+
+  # Modellgröße (von .env)
+  - ASR_MODEL=${ASR_MODEL}
+
   # Hugging Face Token (für Sprecher-Erkennung)
   - HF_TOKEN=${HF_TOKEN}
 ```
@@ -126,7 +208,21 @@ frontend:
     - "8080:80"
 ```
 
-API direkt: Port `9000`
+Dienste-Ports:
+- **Frontend:** 3000 (Web-UI)
+- **API:** 9000 (WhisperX)
+- **Ollama:** 11434 (LLM)
+
+### Persistenz & Speicherung
+
+Die Anwendung speichert automatisch:
+
+- **Transkript-Daten** → localStorage (~5-10 MB)
+- **Audio-Dateien** → IndexedDB (bis zu 50% freier Speicherplatz)
+- **Zusammenfassungen** → localStorage (alle Typen separat gespeichert)
+- **Modell-Cache** → Docker Volumes (`whisper_cache`, `ollama_models`)
+
+**Retention:** 7 Tage automatische Aufbewahrung, danach werden Daten gelöscht.
 
 ## 🐛 Troubleshooting
 
@@ -160,30 +256,68 @@ sudo systemctl restart docker
 ### Out of Memory (GPU)
 
 Kleineres Modell verwenden:
-```yaml
-- ASR_MODEL=small  # statt large-v3
+```bash
+# In .env ändern:
+ASR_MODEL=small  # statt large-v3
+OLLAMA_MODEL=llama3.2:3b  # statt qwen2.5:7b
+
+# Container neu starten
+docker compose restart
 ```
+
+**Tipp:** Ollama entlädt Modelle nach 10 Minuten Inaktivität automatisch, um VRAM freizugeben.
+
+### Zusammenfassungen werden nicht generiert
+
+```bash
+# Prüfe ob Ollama läuft
+docker compose ps ollama
+
+# Prüfe ob Modell heruntergeladen wurde
+docker exec ollama ollama list
+
+# Falls nicht, Modell herunterladen
+docker exec ollama ollama pull qwen2.5:7b
+
+# Container neu starten
+docker compose restart ollama frontend
+```
+
+### Zusammenfassungen sind langsam
+
+- **Erstes Request ist langsamer** (Model Loading ~5-10 Sekunden)
+- **Kleineres Modell nutzen:** `llama3.2:3b` ist 2x schneller als `qwen2.5:7b`
+- **GPU-Nutzung prüfen:** `docker exec ollama nvidia-smi`
 
 ## 📁 Verzeichnisstruktur
 
 ```
 whisper-transcriber/
-├── docker-compose.yml    # Container-Konfiguration
-├── .env                  # Secrets (HF_TOKEN)
+├── docker-compose.yml    # Container-Konfiguration (whisper-api, ollama, frontend)
+├── .env                  # Secrets (HF_TOKEN, ASR_MODEL, OLLAMA_MODEL)
 ├── .env.example          # Vorlage
+├── docs/                 # Detaillierte Dokumentation
+│   ├── CLAUDE.md         # Vollständige Projektdokumentation
+│   ├── AI_SUMMARY.md     # Ollama Integration & Zusammenfassungen
+│   ├── DIARIZATION_FIX.md
+│   ├── GPU_MEMORY_FIX.md
+│   └── INDEXEDDB_STORAGE.md
 └── frontend/
     ├── Dockerfile
-    ├── nginx.conf
-    ├── index.html
-    ├── styles.css
-    └── app.js
+    ├── nginx.conf        # Reverse Proxy für /api und /ollama
+    ├── index.html        # UI mit Tab-Navigation
+    ├── styles.css        # Styling
+    └── app.js            # Transkriptor + SummaryManager Klassen
 ```
 
-## 🔒 Sicherheit
+## 🔒 Sicherheit & Datenschutz
 
-- Alle Daten werden **lokal verarbeitet**
-- Keine Daten werden an externe Server gesendet
-- Hugging Face Token wird nur für Model-Downloads verwendet
+- **100% lokal** – Alle Daten werden auf deinem Server verarbeitet
+- **Keine Cloud-Dienste** – WhisperX, Ollama und alle Modelle laufen lokal
+- **Keine Datenübertragung** – Audio, Transkripte und Zusammenfassungen verlassen nie deinen Server
+- **DSGVO-konform** – Ideal für sensible Inhalte (Meetings, Interviews, vertrauliche Aufnahmen)
+- **Offline-fähig** – Funktioniert ohne Internetverbindung (nach Model-Download)
+- **Hugging Face Token** – Wird nur für einmaligen Model-Download verwendet
 
 ## 📄 Lizenz
 
@@ -194,3 +328,15 @@ MIT License – Frei verwendbar für private und kommerzielle Zwecke.
 - [WhisperX](https://github.com/m-bain/whisperX) – ASR mit Alignment und Diarization
 - [whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice) – API Backend
 - [pyannote-audio](https://github.com/pyannote/pyannote-audio) – Speaker Diarization
+- [Ollama](https://ollama.com) – Lokale LLM-Integration für KI-Zusammenfassungen
+- [Qwen2.5](https://huggingface.co/Qwen/Qwen2.5-7B) – Exzellentes LLM für strukturierte Zusammenfassungen
+
+## 📚 Weitere Dokumentation
+
+Detaillierte Dokumentation findest du im `docs/` Verzeichnis:
+
+- **[docs/CLAUDE.md](docs/CLAUDE.md)** – Vollständige Projektübersicht und Architektur
+- **[docs/AI_SUMMARY.md](docs/AI_SUMMARY.md)** – Ollama Integration, Prompts und Modellvergleiche
+- **[docs/INDEXEDDB_STORAGE.md](docs/INDEXEDDB_STORAGE.md)** – Audio-Speicherung mit IndexedDB
+- **[docs/GPU_MEMORY_FIX.md](docs/GPU_MEMORY_FIX.md)** – CUDA Memory Troubleshooting
+- **[docs/DIARIZATION_FIX.md](docs/DIARIZATION_FIX.md)** – Speaker Diarization Optimierung
