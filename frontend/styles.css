@@ -990,6 +990,35 @@ body::before {
     color: var(--text-muted);
 }
 
+/* Transcription Performance Stats */
+.transcription-performance-stats {
+    display: flex;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--bg-primary);
+    border: 1px solid rgba(127, 90, 240, 0.2);
+    border-radius: var(--radius-md);
+    margin: var(--space-md) var(--space-lg) 0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+}
+
+.perf-stat {
+    display: flex;
+    gap: var(--space-xs);
+    align-items: center;
+}
+
+.perf-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.perf-stat span:last-child {
+    color: var(--accent);
+    font-weight: 600;
+}
+
 /* ============================================
    Bulk Edit Toolbar
    ============================================ */

@@ -440,6 +440,13 @@ class Transkriptor {
         this.segmentCountEl = document.getElementById('segmentCount');
         this.durationEl = document.getElementById('duration');
 
+        // Performance Stats
+        this.performanceStats = document.getElementById('performanceStats');
+        this.perfFileSize = document.getElementById('perfFileSize');
+        this.perfAudioDuration = document.getElementById('perfAudioDuration');
+        this.perfTranscriptionTime = document.getElementById('perfTranscriptionTime');
+        this.perfRealTimeFactor = document.getElementById('perfRealTimeFactor');
+
         // Status
         this.apiStatus = document.getElementById('apiStatus');
         this.apiStatusText = document.getElementById('apiStatusText');
@@ -652,6 +659,9 @@ class Transkriptor {
         this.audioFile = file;
         this.audioBlob = URL.createObjectURL(file);
 
+        // Get audio duration
+        const audioDuration = await this.getAudioDuration(this.audioBlob);
+
         // Show progress
         this.showSection('progress');
         this.fileName.textContent = file.name;
@@ -683,6 +693,9 @@ class Transkriptor {
             this.progressTitle.textContent = 'Transkribiere...';
             this.progressText.textContent = 'Dies kann je nach Dateigröße einige Minuten dauern';
 
+            // Start timer
+            const startTime = Date.now();
+
             const response = await fetch(`${this.apiUrl}/asr?${params.toString()}`, {
                 method: 'POST',
                 body: formData
@@ -694,7 +707,21 @@ class Transkriptor {
             }
 
             const data = await response.json();
+
+            // End timer
+            const endTime = Date.now();
+            const transcriptionTime = (endTime - startTime) / 1000; // in Sekunden
+
+            // Add metadata
             this.transcriptData = data;
+            this.transcriptionStats = {
+                fileName: file.name,
+                fileSize: file.size,
+                audioDuration: audioDuration,
+                transcriptionTime: transcriptionTime,
+                realTimeFactor: audioDuration > 0 ? audioDuration / transcriptionTime : 0,
+                timestamp: Date.now()
+            };
 
             this.showEditor();
             this.showToast('Transkription erfolgreich!', 'success');
@@ -984,6 +1011,24 @@ class Transkriptor {
             duration = lastSeg.end || 0;
         }
         this.durationEl.textContent = this.formatTime(duration);
+
+        // Performance Stats
+        if (this.transcriptionStats) {
+            this.performanceStats.style.display = 'flex';
+            this.perfFileSize.textContent = this.formatFileSize(this.transcriptionStats.fileSize);
+            this.perfAudioDuration.textContent = this.formatDuration(this.transcriptionStats.audioDuration);
+            this.perfTranscriptionTime.textContent = this.formatDuration(this.transcriptionStats.transcriptionTime);
+
+            // Real-time factor (e.g., "5.2x Echtzeit" = 5.2x faster than real-time)
+            const factor = this.transcriptionStats.realTimeFactor;
+            if (factor > 0) {
+                this.perfRealTimeFactor.textContent = `${factor.toFixed(1)}x Echtzeit`;
+            } else {
+                this.perfRealTimeFactor.textContent = '-';
+            }
+        } else {
+            this.performanceStats.style.display = 'none';
+        }
     }
 
     exportTranscript(format) {
@@ -1184,6 +1229,35 @@ class Transkriptor {
         return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
     }
 
+    getAudioDuration(audioUrl) {
+        return new Promise((resolve, reject) => {
+            const audio = new Audio();
+            audio.addEventListener('loadedmetadata', () => {
+                resolve(audio.duration);
+            });
+            audio.addEventListener('error', () => {
+                console.warn('Konnte Audio-Dauer nicht ermitteln');
+                resolve(0);
+            });
+            audio.src = audioUrl;
+        });
+    }
+
+    formatDuration(seconds) {
+        if (!seconds || seconds <= 0) return '0s';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+
+        if (h > 0) {
+            return `${h}h ${m}min ${s}s`;
+        } else if (m > 0) {
+            return `${m}min ${s}s`;
+        } else {
+            return `${s}s`;
+        }
+    }
+
     // ============================================
     // Audio Player
     // ============================================
@@ -1263,6 +1337,7 @@ class Transkriptor {
             transcriptData: this.transcriptData,
             speakerNames: this.speakerNames,
             summaries: this.summaryManager.summaries || {},
+            transcriptionStats: this.transcriptionStats || null,
             timestamp: Date.now()
         };
 
@@ -1307,7 +1382,17 @@ class Transkriptor {
             if (data.timestamp && (Date.now() - data.timestamp) < maxAge) {
                 this.transcriptData = data.transcriptData;
                 this.speakerNames = data.speakerNames || {};
+                this.transcriptionStats = data.transcriptionStats || null;
                 console.log('✅ Transkript-Daten geladen');
+
+                if (this.transcriptionStats) {
+                    console.log('📊 Performance-Stats geladen:', {
+                        fileSize: this.formatFileSize(this.transcriptionStats.fileSize),
+                        audioDuration: this.formatDuration(this.transcriptionStats.audioDuration),
+                        transcriptionTime: this.formatDuration(this.transcriptionStats.transcriptionTime),
+                        factor: this.transcriptionStats.realTimeFactor.toFixed(1) + 'x'
+                    });
+                }
 
                 // Zusammenfassungen wiederherstellen
                 if (data.summaries && Object.keys(data.summaries).length > 0) {
