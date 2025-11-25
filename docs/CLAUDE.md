@@ -43,7 +43,7 @@ The frontend is a two-class application (`Transkriptor` and `SummaryManager` in 
 - **AI Summary Panel** with 4 summary types (short, structured, timeline, action items)
 - Export formats: TXT, SRT, VTT, JSON, Word (HTML-based .doc)
 - **Audio playback** with synchronized segment highlighting
-- **Persistent storage** using localStorage (transcript) + IndexedDB (audio files)
+- **Persistent storage** using IndexedDB (all data) + localStorage (metadata only)
 - **Real-time streaming** summary generation with Ollama LLM
 
 Key frontend files:
@@ -54,12 +54,15 @@ Key frontend files:
 
 ### Data Persistence
 
-The application automatically saves your work:
-- **Transkript data** (JSON, speaker names) → localStorage (~5-10 MB limit)
-- **Audio files** (original upload) → IndexedDB (much larger limit, often 50% of disk)
+The application automatically saves your work using **IndexedDB Version 2**:
+- **Transcript data** (JSON, speaker names, summaries, stats) → IndexedDB store "transcriptData"
+- **Audio files** (original upload) → IndexedDB store "audioFiles"
+- **Metadata only** (hasData, timestamp, fileName) → localStorage (~1 KB)
 - **Auto-save** on every change (speaker names, text edits, segment reassignments)
 - **7-day retention** - data expires after 7 days automatically
-- See `INDEXEDDB_STORAGE.md` for detailed storage documentation
+- **Automatic migration** from old localStorage-based format on first load
+- **No quota issues** - IndexedDB can store up to 50% of available disk space
+- See `docs/INDEXEDDB_STORAGE.md` for detailed storage documentation
 
 ### API Communication
 

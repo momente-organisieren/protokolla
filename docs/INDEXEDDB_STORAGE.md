@@ -1,8 +1,8 @@
-# IndexedDB Storage für große Audio-Dateien
+# IndexedDB Storage für große Dateien
 
 ## Problem gelöst ✅
 
-localStorage hat ein Limit von ~5-10 MB, was für große Audio-Dateien nicht ausreicht. Die neue Implementierung nutzt **IndexedDB**, eine Browser-Datenbank, die viel größere Dateien speichern kann.
+localStorage hat ein Limit von ~5-10 MB, was für große Audio-Dateien und umfangreiche Transkripte mit KI-Zusammenfassungen nicht ausreicht. Die neue Implementierung nutzt **IndexedDB**, eine Browser-Datenbank, die viel größere Datenmengen speichern kann.
 
 ## Vorteile von IndexedDB
 
@@ -10,26 +10,33 @@ localStorage hat ein Limit von ~5-10 MB, was für große Audio-Dateien nicht aus
 - **Performance**: Schneller als Base64-Encoding (kein Konvertieren nötig)
 - **Native File Support**: Speichert File-Objekte direkt, ohne Encoding
 - **Asynchron**: Blockiert die UI nicht beim Speichern/Laden
+- **Transaktional**: Datenintegrität garantiert
 
 ## Wie es funktioniert
 
-### 1. Getrennte Speicherung
+### 1. Hauptspeicherung in IndexedDB
 
-- **localStorage**: Transkript-Daten, Sprecher-Namen (klein, schnell)
-- **IndexedDB**: Audio-Dateien (groß, effizient)
+**Version 2 (aktuell):**
+- **IndexedDB Store "audioFiles"**: Audio-Dateien (File-Objekte)
+- **IndexedDB Store "transcriptData"**: Transkripte, Sprecher-Namen, KI-Zusammenfassungen, Performance-Stats
+- **localStorage**: Nur kleine Metadaten (hasData, timestamp, fileName) für schnellen Check
+
+Diese Architektur löst das localStorage-Quota-Problem auch bei großen Transkripten mit mehreren KI-Zusammenfassungen.
 
 ### 2. Automatisches Speichern
 
 Jedes Mal, wenn Sie etwas ändern:
-- Transkript → localStorage
-- Audio → IndexedDB
+- Transkript, Sprecher-Namen, Zusammenfassungen, Stats → **IndexedDB** (transcriptData Store)
+- Audio-Datei → **IndexedDB** (audioFiles Store)
+- Metadaten → **localStorage** (klein, schnell)
 
 ### 3. Automatisches Laden
 
 Beim Seitenaufruf:
-1. Transkript aus localStorage laden
-2. Audio aus IndexedDB laden (parallel)
-3. Beide zusammenführen und anzeigen
+1. Metadaten aus localStorage prüfen (schnell)
+2. Transkriptionsdaten aus IndexedDB laden (transcriptData Store)
+3. Audio aus IndexedDB laden (audioFiles Store, parallel)
+4. Alles zusammenführen und anzeigen
 
 ### 4. Automatische Bereinigung
 
@@ -38,18 +45,21 @@ Beim Seitenaufruf:
 
 ## Speicher-Limits
 
-### localStorage (für Transkript-Daten)
+### localStorage (nur für Metadaten)
 - **Limit**: ~5-10 MB
-- **Ausreichend für**: JSON-Daten (Transkript, Sprecher-Namen)
+- **Verwendung**: Nur kleine Metadaten (~1 KB: hasData, timestamp, fileName)
+- **Kein Problem mehr**: Große Daten liegen in IndexedDB
 
-### IndexedDB (für Audio-Dateien)
+### IndexedDB (für alle großen Daten)
 - **Chrome/Edge**: Bis zu 60% der verfügbaren Festplatte
 - **Firefox**: Bis zu 50% der verfügbaren Festplatte
 - **Safari**: Bis zu 1 GB (dann fragt der Browser nach Erlaubnis)
 
 **Beispiel bei 100 GB freiem Speicher:**
 - Chrome: ~60 GB für IndexedDB verfügbar
-- Sie können problemlos Audio-Dateien >500 MB speichern
+- Audio-Dateien >500 MB ✅
+- Transkripte mit mehreren KI-Zusammenfassungen ✅
+- Mehrere hundert Seiten Text ✅
 
 ## Speicher-Nutzung prüfen
 
@@ -68,8 +78,10 @@ app.audioStorage.getStorageEstimate().then(estimate => {
 1. Öffnen Sie die Developer Tools (F12)
 2. Tab "Application" (Chrome) oder "Storage" (Firefox)
 3. Expandieren Sie "IndexedDB"
-4. Klicken Sie auf "TranscriptorDB" → "audioFiles"
-5. Sie sehen die gespeicherte Audio-Datei mit Metadaten
+4. Klicken Sie auf "TranscriptorDB"
+5. Sie sehen zwei Stores:
+   - **"audioFiles"**: Gespeicherte Audio-Datei mit Metadaten
+   - **"transcriptData"**: Komplettes Transkript mit allen Zusammenfassungen
 
 ## Was passiert bei sehr großen Dateien?
 
@@ -107,36 +119,52 @@ Beim Laden: ✅ Sofort verfügbar
 
 ## Migration von alten Daten
 
-Falls Sie bereits Daten im alten Format (mit Base64) haben:
-1. Die alten Daten bleiben in localStorage
-2. Beim nächsten Speichern wird auf IndexedDB umgestellt
-3. Alte Base64-Daten werden nicht automatisch migriert
+Die Anwendung migriert automatisch von alten Formaten:
 
-Um manuell aufzuräumen:
+### Automatische Migration beim ersten Laden
+1. **localStorage-Format erkannt**: Alte Daten in `transcriptor_current`
+2. **Automatische Migration**: Daten werden nach IndexedDB kopiert
+3. **Cleanup**: Alte localStorage-Einträge werden gelöscht
+4. **Neue Metadaten**: Nur kleine Metadaten bleiben in localStorage
 
-```javascript
-// In der Browser-Konsole (F12)
-localStorage.clear();
-```
+Keine manuelle Aktion erforderlich! Die Migration geschieht transparent beim nächsten Seitenaufruf.
 
 ## Technische Details
 
-### AudioStorage Klasse (app.js Zeile 8-109)
+### AudioStorage Klasse (app.js Zeile 8-228)
 
 ```javascript
 class AudioStorage {
-    async saveAudioFile(file)    // Speichert File-Objekt in IndexedDB
-    async getAudioFile()          // Lädt File-Objekt aus IndexedDB
-    async deleteAudioFile()       // Löscht Audio aus IndexedDB
-    async getStorageEstimate()    // Zeigt Speicher-Nutzung
+    // Version 2 mit zwei Stores: audioFiles + transcriptData
+
+    // Audio-Dateien
+    async saveAudioFile(file)           // Speichert File-Objekt in IndexedDB
+    async getAudioFile()                // Lädt File-Objekt aus IndexedDB
+    async deleteAudioFile()             // Löscht Audio aus IndexedDB
+
+    // Transkriptionsdaten (NEU in Version 2)
+    async saveTranscriptData(data)      // Speichert Transkript, Sprecher, Summaries, Stats
+    async getTranscriptData()           // Lädt Transkriptionsdaten aus IndexedDB
+    async deleteTranscriptData()        // Löscht Transkriptionsdaten aus IndexedDB
+
+    // Hilfsmethoden
+    async getStorageEstimate()          // Zeigt Speicher-Nutzung
 }
 ```
 
 ### Verwendung in Transkriptor Klasse
 
-- **saveToStorage()**: Speichert Transkript (localStorage) + Audio (IndexedDB)
-- **loadFromStorage()**: Lädt beide Quellen parallel
-- **clearStorage()**: Löscht beide Speicher
+- **saveToStorage()**:
+  - Speichert große Daten (Transkript, Summaries, Sprecher, Stats) → IndexedDB (transcriptData Store)
+  - Speichert Audio → IndexedDB (audioFiles Store)
+  - Speichert nur Metadaten → localStorage (~1 KB)
+- **loadFromStorage()**:
+  - Prüft Metadaten in localStorage
+  - Migriert alte Daten automatisch (falls vorhanden)
+  - Lädt Transkriptionsdaten und Audio aus IndexedDB parallel
+- **clearStorage()**:
+  - Löscht beide IndexedDB-Stores
+  - Löscht localStorage-Metadaten
 
 ## Troubleshooting
 

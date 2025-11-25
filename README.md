@@ -215,12 +215,17 @@ Dienste-Ports:
 
 ### Persistenz & Speicherung
 
-Die Anwendung speichert automatisch:
+Die Anwendung speichert automatisch mit **IndexedDB Version 2**:
 
-- **Transkript-Daten** → localStorage (~5-10 MB)
-- **Audio-Dateien** → IndexedDB (bis zu 50% freier Speicherplatz)
-- **Zusammenfassungen** → localStorage (alle Typen separat gespeichert)
+- **Transkript-Daten, Zusammenfassungen, Sprecher-Namen, Performance-Stats** → IndexedDB (Store "transcriptData")
+- **Audio-Dateien** → IndexedDB (Store "audioFiles", bis zu 50% freier Speicherplatz)
+- **Metadaten** → localStorage (~1 KB, nur für schnellen Check)
 - **Modell-Cache** → Docker Volumes (`whisper_cache`, `ollama_models`)
+
+**Vorteile:**
+- ✅ Keine localStorage-Quota-Fehler mehr (auch bei großen Transkripten mit KI-Zusammenfassungen)
+- ✅ Automatische Migration von alten Daten beim ersten Laden
+- ✅ Transaktionale Sicherheit für Datenintegrität
 
 **Retention:** 7 Tage automatische Aufbewahrung, danach werden Daten gelöscht.
 
@@ -337,6 +342,6 @@ Detaillierte Dokumentation findest du im `docs/` Verzeichnis:
 
 - **[docs/CLAUDE.md](docs/CLAUDE.md)** – Vollständige Projektübersicht und Architektur
 - **[docs/AI_SUMMARY.md](docs/AI_SUMMARY.md)** – Ollama Integration, Prompts und Modellvergleiche
-- **[docs/INDEXEDDB_STORAGE.md](docs/INDEXEDDB_STORAGE.md)** – Audio-Speicherung mit IndexedDB
+- **[docs/INDEXEDDB_STORAGE.md](docs/INDEXEDDB_STORAGE.md)** – Datenspeicherung mit IndexedDB (Version 2)
 - **[docs/GPU_MEMORY_FIX.md](docs/GPU_MEMORY_FIX.md)** – CUDA Memory Troubleshooting
 - **[docs/DIARIZATION_FIX.md](docs/DIARIZATION_FIX.md)** – Speaker Diarization Optimierung
