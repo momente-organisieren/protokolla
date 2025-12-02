@@ -9,8 +9,8 @@ Eine vollständig lokal gehostete Web-Anwendung zur automatischen Transkription 
 - **🎯 Lokale Verarbeitung** – Deine Daten verlassen nie deinen Server
 - **👥 Sprecher-Diarisierung** – Automatische Erkennung verschiedener Sprecher (bis zu 30 Sprecher)
 - **🌍 Multi-Sprache** – Unterstützt 20+ Sprachen (Deutsch, Englisch, etc.)
-- **⏱️ Zeitstempel** – Wortgenaue oder Segment-Zeitstempel
-- **✏️ Editor** – Transkripte direkt im Browser bearbeiten
+- **⏱️ Zeitstempel** – Wortgenaue oder Segment-Zeitstempel mit automatischer Drift-Korrektur
+- **✏️ Editor** – Transkripte direkt im Browser bearbeiten mit Karaoke-Style Word-Highlighting
 - **🤖 KI-Zusammenfassungen** – 5 verschiedene Zusammenfassungstypen mit lokalem LLM (Ollama)
 - **🗂️ Tab-Navigation** – Übersichtliche Trennung von Transkript und Zusammenfassungen
 - **💾 Persistenz** – Automatisches Speichern von Transkripten und Zusammenfassungen
@@ -128,6 +128,52 @@ Nach der Transkription wechselst du zum **Zusammenfassung-Tab**:
 4. **Exportieren oder Kopieren** – Zusammenfassungen als TXT exportieren oder in Zwischenablage kopieren
 
 **Hinweis:** Alle Zusammenfassungen werden automatisch gespeichert und sind auch nach einem Neuladen verfügbar.
+
+## ⚠️ Audio-Encoding Empfehlungen
+
+Für optimale Zeitstempel-Genauigkeit sollten Audio-Dateien korrekt kodiert sein:
+
+### Problem: VBR MP3 mit korrupten Metadaten
+
+**Variable Bitrate (VBR) MP3-Dateien** können fehlerhafte Metadaten enthalten, die zu Zeitstempel-Drift führen:
+- Metadaten sagen: "Dauer = 3:10:11"
+- Tatsächliche Audio-Dauer: "3:10:27"
+- Ergebnis: Timestamps driften über die gesamte Datei (bis zu 16+ Sekunden bei 3 Stunden)
+
+### ✅ Empfohlene Einstellungen
+
+Verwende **Constant Bitrate (CBR)** statt VBR für MP3-Dateien:
+
+```bash
+# Mit ffmpeg neu kodieren (empfohlen)
+ffmpeg -i input.mp3 -c:a libmp3lame -b:a 128k -ar 44100 -write_xing 0 output.mp3
+```
+
+**Parameter-Erklärung:**
+- `-c:a libmp3lame` – LAME MP3 Encoder (beste Qualität)
+- `-b:a 128k` – Konstante Bitrate 128 kbps
+- `-ar 44100` – Sample Rate 44.1 kHz (Standard)
+- `-write_xing 0` – Deaktiviert VBR-Header (erzwingt CBR)
+
+**Alternative Tools:**
+- **XMedia Recode** (Windows): Unter Audio → Bitrate-Modus → "Konstant (CBR)" wählen
+- **Handbrake** (Cross-Platform): Audio-Tab → Bitrate auf konstanten Wert setzen
+
+### Automatische Drift-Korrektur
+
+Die Anwendung erkennt und korrigiert Zeitstempel-Drift automatisch:
+- Beim Laden wird die tatsächliche Audio-Dauer mit den Transkript-Timestamps verglichen
+- Alle Timestamps werden mathematisch skaliert (z.B. ×1.0014 bei 0.14% Drift)
+- In der Konsole erscheint: `📊 Drift Analysis: ... Total drift: 16.0s ... Drift factor: 1.001402 (+0.140%)`
+- Das UI zeigt: `Drift: +0.14% (Auto)`
+
+**Manuelle Feinabstimmung:** Falls nötig, kann der Drift-Slider (±1%) für Feinkorrektur verwendet werden.
+
+### Andere Format-Empfehlungen
+
+- **WAV** – Unkomprimiert, keine Metadaten-Probleme, aber große Dateien
+- **M4A/AAC** – Gute Alternative zu MP3, meist korrekte Metadaten
+- **FLAC** – Verlustfrei, zuverlässige Metadaten
 
 ## 🎛️ Modelle & Performance
 
@@ -260,11 +306,15 @@ sudo systemctl restart docker
 
 ### Zeitstempel-Drift (Timestamps werden ungenau)
 
-Wenn Zeitstempel am Anfang stimmen, aber später nicht mehr zur Audio-Datei passen:
+Wenn Zeitstempel über die Laufzeit der Datei immer ungenauer werden:
 
-1. **Wort-Zeitstempel aktivieren** (empfohlen) - Checkbox in den Optionen
-2. Bessere Audio-Qualität verwenden (weniger Hintergrundrauschen)
-3. Größeres Modell nutzen (`medium` oder `large-v3`)
+1. **Audio-Datei neu kodieren** (empfohlen) – Siehe [Audio-Encoding Empfehlungen](#️-audio-encoding-empfehlungen)
+   - VBR MP3 mit korrupten Metadaten ist die häufigste Ursache
+   - Mit CBR neu kodieren löst das Problem dauerhaft
+2. **Wort-Zeitstempel aktivieren** – Checkbox in den Optionen
+3. **Automatische Drift-Korrektur** – Wird beim Laden automatisch angewendet
+4. Bessere Audio-Qualität verwenden (weniger Hintergrundrauschen)
+5. Größeres Modell nutzen (`medium` oder `large-v3`)
 
 Siehe **[docs/TIMESTAMP_DRIFT_FIX.md](docs/TIMESTAMP_DRIFT_FIX.md)** für detaillierte Lösungen.
 

@@ -267,6 +267,10 @@
                             </svg>
                             <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="80">
                         </div>
+                        <div class="audio-offset">
+                            <span class="offset-label" id="offsetLabel">Drift: None</span>
+                            <input type="range" class="offset-slider" id="offsetSlider" min="-1" max="1" value="0" step="0.01" title="Manual drift adjustment (-1% to +1%)">
+                        </div>
                     </div>
                     <audio id="audioPlayer" preload="metadata"></audio>
                 </div>

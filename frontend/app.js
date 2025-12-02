@@ -489,6 +489,8 @@ class Transkriptor {
         this.lastClickedIndex = null;
         this.lastScrolledSegmentIndex = -1;
         this.isUpdatingSeekSlider = false;
+        this.driftFactor = 1.0; // Automatic drift correction factor (1.0 = no drift)
+        this.manualDriftAdjustment = 0.0; // User fine-tuning on top of auto (-0.01 to +0.01)
         this.summaryManager = new SummaryManager(this);
 
         // Initialize throttled word-level progress update (60 FPS = ~16ms)
@@ -505,6 +507,16 @@ class Transkriptor {
         this.bindEvents();
         this.checkApiStatus();
         await this.loadFromStorage();
+
+        // Load saved manual drift adjustment
+        const savedAdjustment = localStorage.getItem('manualDriftAdjustment');
+        if (savedAdjustment !== null) {
+            this.manualDriftAdjustment = parseFloat(savedAdjustment);
+            if (this.offsetSlider) {
+                this.offsetSlider.value = this.manualDriftAdjustment * 100; // Scale to percentage
+            }
+            this.updateDriftLabel();
+        }
     }
 
     cacheElements() {
@@ -565,6 +577,8 @@ class Transkriptor {
         this.audioCurrentTime = document.getElementById('audioCurrentTime');
         this.audioDuration = document.getElementById('audioDuration');
         this.volumeSlider = document.getElementById('volumeSlider');
+        this.offsetSlider = document.getElementById('offsetSlider');
+        this.offsetLabel = document.getElementById('offsetLabel');
 
         // Bulk Edit
         this.bulkEditToolbar = document.getElementById('bulkEditToolbar');
@@ -653,6 +667,11 @@ class Transkriptor {
         });
         this.volumeSlider.addEventListener('input', (e) => {
             this.audioPlayer.volume = e.target.value / 100;
+        });
+        this.offsetSlider.addEventListener('input', (e) => {
+            this.manualDriftAdjustment = parseFloat(e.target.value) / 100; // Convert percentage to decimal
+            this.updateDriftLabel();
+            localStorage.setItem('manualDriftAdjustment', this.manualDriftAdjustment);
         });
         this.audioPlayer.addEventListener('timeupdate', () => this.updateAudioProgress());
         this.audioPlayer.addEventListener('loadedmetadata', () => this.onAudioLoaded());
@@ -860,6 +879,45 @@ class Transkriptor {
             this.audioPlayer.src = this.audioBlob;
             this.audioPlayerPanel.classList.remove('hidden');
             this.audioPlayer.volume = 0.8; // 80%
+
+            // Calculate drift factor when audio metadata loads
+            this.audioPlayer.addEventListener('loadedmetadata', () => {
+                this.calculateDriftFactor();
+            }, { once: true });
+        }
+    }
+
+    calculateDriftFactor() {
+        if (!this.transcriptData?.segments || !this.audioPlayer.duration) {
+            console.log('⚠️ Cannot calculate drift: missing transcript or audio duration');
+            return;
+        }
+
+        // Find the last segment's end time
+        const segments = this.transcriptData.segments;
+        const lastSegment = segments[segments.length - 1];
+        const transcriptDuration = lastSegment.end;
+        const audioDuration = this.audioPlayer.duration;
+
+        // Calculate drift factor
+        this.driftFactor = audioDuration / transcriptDuration;
+
+        const driftPercentage = ((this.driftFactor - 1.0) * 100).toFixed(3);
+        const totalDrift = audioDuration - transcriptDuration;
+
+        console.log(`📊 Drift Analysis:
+  - Transcript ends at: ${this.formatAudioTime(transcriptDuration)}
+  - Audio ends at: ${this.formatAudioTime(audioDuration)}
+  - Total drift: ${totalDrift.toFixed(1)}s
+  - Drift factor: ${this.driftFactor.toFixed(6)} (${driftPercentage}%)
+  - Correction: ${this.driftFactor > 1.0 ? 'Stretching' : 'Compressing'} timestamps`);
+
+        // Update UI to show drift correction
+        this.updateDriftLabel();
+
+        // Show toast notification if significant drift detected
+        if (Math.abs(totalDrift) > 3) {
+            this.showToast(`Zeitstempel-Drift erkannt: ${totalDrift.toFixed(1)}s über ${this.formatAudioTime(audioDuration)}. Automatische Korrektur aktiv.`, 'info');
         }
     }
 
@@ -1495,9 +1553,33 @@ class Transkriptor {
             targetSegment.classList.add('playing');
         }
 
-        // Jump to time and play
-        this.audioPlayer.currentTime = segment.start;
+        // Jump to time and play (with drift correction)
+        this.audioPlayer.currentTime = this.correctTimestamp(segment.start);
         this.audioPlayer.play();
+    }
+
+    updateDriftLabel() {
+        if (!this.offsetLabel) return;
+
+        const totalFactor = this.driftFactor + this.manualDriftAdjustment;
+        const driftPercentage = ((totalFactor - 1.0) * 100).toFixed(2);
+        const sign = driftPercentage >= 0 ? '+' : '';
+
+        if (this.driftFactor === 1.0 && this.manualDriftAdjustment === 0) {
+            this.offsetLabel.textContent = 'Drift: None';
+        } else if (this.manualDriftAdjustment === 0) {
+            this.offsetLabel.textContent = `Drift: ${sign}${driftPercentage}% (Auto)`;
+        } else {
+            const autoPct = ((this.driftFactor - 1.0) * 100).toFixed(2);
+            const manualPct = (this.manualDriftAdjustment * 100).toFixed(2);
+            this.offsetLabel.textContent = `Drift: ${sign}${driftPercentage}% (Auto: ${autoPct}%, Manual: ${manualPct > 0 ? '+' : ''}${manualPct}%)`;
+        }
+    }
+
+    // Apply drift correction to a transcript timestamp to get corrected audio time
+    correctTimestamp(transcriptTime) {
+        const totalFactor = this.driftFactor + this.manualDriftAdjustment;
+        return transcriptTime * totalFactor;
     }
 
     updateAudioProgress() {
@@ -1547,7 +1629,11 @@ class Transkriptor {
         for (let i = 0; i < this.transcriptData.segments.length; i++) {
             const seg = this.transcriptData.segments[i];
 
-            if (currentTime >= seg.start && currentTime <= seg.end) {
+            // Apply drift correction for comparison
+            const correctedStart = this.correctTimestamp(seg.start);
+            const correctedEnd = this.correctTimestamp(seg.end);
+
+            if (currentTime >= correctedStart && currentTime <= correctedEnd) {
                 currentSegmentIndex = i;
                 const segmentEl = this.transcriptEditor.querySelector(`[data-index="${i}"]`);
 
@@ -1592,16 +1678,19 @@ class Transkriptor {
     }
 
     findCurrentWord(words, currentTime) {
-        // Find exact word
+        // Find exact word (apply drift correction)
         for (let i = 0; i < words.length; i++) {
-            if (currentTime >= words[i].start && currentTime <= words[i].end) {
+            const correctedStart = this.correctTimestamp(words[i].start);
+            const correctedEnd = this.correctTimestamp(words[i].end);
+            if (currentTime >= correctedStart && currentTime <= correctedEnd) {
                 return i;
             }
         }
 
-        // If between words, return most recent
+        // If between words, return most recent (apply drift correction)
         for (let i = words.length - 1; i >= 0; i--) {
-            if (currentTime >= words[i].end) {
+            const correctedEnd = this.correctTimestamp(words[i].end);
+            if (currentTime >= correctedEnd) {
                 return i;
             }
         }

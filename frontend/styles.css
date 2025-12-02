@@ -706,6 +706,60 @@ body::before {
     cursor: pointer;
 }
 
+/* Audio Offset Control */
+.audio-offset {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+    margin-left: var(--space-lg);
+    padding-left: var(--space-lg);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.offset-label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    min-width: 80px;
+}
+
+.offset-slider {
+    width: 100px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right,
+        var(--error) 0%,
+        var(--bg-tertiary) 50%,
+        var(--success) 100%);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.offset-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.offset-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
 /* Speaker Panel */
 .speaker-panel {
     padding: var(--space-md) var(--space-lg);
