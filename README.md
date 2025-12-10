@@ -1,4 +1,4 @@
-# 🎙️ Transkriptor – Lokale Spracherkennung mit KI-Zusammenfassungen
+# 🎙️ Protokolla – Lokale Spracherkennung mit KI-Zusammenfassungen
 
 Eine vollständig lokal gehostete Web-Anwendung zur automatischen Transkription von Audio- und Videodateien mit Sprecherzuweisung und intelligenten KI-Zusammenfassungen.
 
@@ -372,7 +372,7 @@ whisper-transcriber/
     ├── nginx.conf        # Reverse Proxy für /api und /ollama
     ├── index.html        # UI mit Tab-Navigation
     ├── styles.css        # Styling
-    └── app.js            # Transkriptor + SummaryManager Klassen
+    └── app.js            # Protokolla + SummaryManager Klassen
 ```
 
 ## 🔒 Sicherheit & Datenschutz

@@ -1,5 +1,5 @@
 // ============================================
-// Transkriptor – Main Application
+// Protokolla – Main Application
 // ============================================
 
 // ============================================
@@ -477,7 +477,7 @@ Konzentriere dich auf konkrete Themen, Fachbegriffe, Personen, Orte und zentrale
     }
 }
 
-class Transkriptor {
+class Protokolla {
     constructor() {
         this.apiUrl = '/api';
         this.transcriptData = null;
@@ -2053,5 +2053,5 @@ class Transkriptor {
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new Transkriptor();
+    window.app = new Protokolla();
 });

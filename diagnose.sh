@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-# Transkriptor Diagnose-Skript
+# Protokolla Diagnose-Skript
 # ============================================
 
 RED='\033[0;31m'
