@@ -3,7 +3,9 @@ services:
   # WhisperX ASR Backend mit Speaker Diarization
   # ============================================
   whisper-api:
-    image: onerahmet/openai-whisper-asr-webservice:v1.5.0-gpu
+    build:
+      context: ./whisper-backend
+      dockerfile: Dockerfile
     container_name: whisper-api
     restart: unless-stopped
     ports:
