@@ -1,6 +1,40 @@
 # Speaker Diarization Optimierung
 
-## Aktuelle Verbesserungen
+## ✅ PROBLEM GELÖST (Dezember 2025)
+
+**Root Cause gefunden**: Das Backend-Image `v1.5.0-gpu` hatte einen Bug, der verhinderte, dass WhisperX Diarization korrekt funktioniert.
+
+### Die Lösung
+
+**Update auf v1.9.1-gpu** - In `whisper-backend/Dockerfile` Zeile 3:
+```dockerfile
+FROM onerahmet/openai-whisper-asr-webservice:v1.9.1-gpu
+```
+
+Version v1.9.1 enthält den Fix für "whisperx diarization pipeline init". Nach diesem Update:
+- ✅ Speaker Labels erscheinen korrekt (SPEAKER_00, SPEAKER_01, etc.)
+- ✅ Diarization funktioniert wie erwartet
+- ✅ Keine zusätzlichen Konfigurationen nötig
+
+**Wichtig**: Die erste Transkription mit Diarization dauert länger (~2-3 Minuten extra), da Sprachmodelle heruntergeladen werden. Diese werden im `whisper_cache` Volume gecacht und spätere Transkriptionen sind schneller.
+
+### Modell-Updates
+
+Sprachmodelle (z.B. `wav2vec2_voxpopuli_base_10k_asr_de.pt` für Deutsch) werden automatisch beim ersten Gebrauch heruntergeladen und im Docker Volume `whisper_cache` gespeichert.
+
+**Um Modelle zu aktualisieren**:
+```bash
+# Volume löschen um Modelle neu zu laden
+docker compose down
+docker volume rm protokolla_whisper_cache
+docker compose up -d
+```
+
+Dies stellt sicher, dass Sie immer die neuesten Modellversionen von PyTorch erhalten.
+
+---
+
+## Frühere Verbesserungen
 
 ✅ **Min/Max Sprecher UI-Kontrolle hinzugefügt** - Sie können jetzt beide Parameter direkt im Frontend einstellen.
 

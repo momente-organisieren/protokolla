@@ -211,6 +211,13 @@ This prevents re-downloading models on container restart.
 - Run: `docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi`
 - If fails, reconfigure: `sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`
 
+### No Speaker Labels / Diarization Not Working
+- **Solution**: Ensure you're using `v1.9.1-gpu` or later in `whisper-backend/Dockerfile`
+- v1.5.0 and earlier have a bug preventing WhisperX diarization from working
+- See `docs/DIARIZATION_FIX.md` for complete documentation
+- First transcription with diarization takes 2-3 minutes extra (downloading language models)
+- Models are cached in `whisper_cache` volume for subsequent use
+
 ### Healthcheck Details
 The healthcheck uses Python to fetch `/docs` (FastAPI standard endpoint) because `/health` returns 404. Start period is 600s to account for model downloads on first run.
 
