@@ -78,6 +78,36 @@ services:
       - default
 
   # ============================================
+  # Audio Chunker Middleware
+  # Splittet lange Audiodateien (>30min) automatisch
+  # ============================================
+  chunker:
+    build:
+      context: ./chunker
+      dockerfile: Dockerfile
+    container_name: chunker
+    restart: unless-stopped
+    environment:
+      - WHISPER_URL=http://whisper-api:9000
+      # Audiodateien ab dieser Länge (Minuten) werden gesplittet
+      - CHUNK_MINUTES=${CHUNK_MINUTES:-30}
+      # Überlappung zwischen Chunks (Sekunden) für nahtlose Übergänge
+      - OVERLAP_SECONDS=${OVERLAP_SECONDS:-30}
+      # Timeout pro Chunk in Sekunden
+      - CHUNK_TIMEOUT=${CHUNK_TIMEOUT:-3600}
+    depends_on:
+      whisper-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - default
+
+  # ============================================
   # Frontend Web-UI mit Editor
   # ============================================
   frontend:
@@ -89,7 +119,7 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      whisper-api:
+      chunker:
         condition: service_healthy
     networks:
       - default
